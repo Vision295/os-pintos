@@ -4,3 +4,14 @@
 !.gitignore
 !README.md
 
+# THREADS directory
+!threads/init.c
+!threads/init.h
+
+!threads/thread.c
+!threads/thread.h
+
+# DEVICES directory
+!devices/timer.c
+!devices/timer.h
+
