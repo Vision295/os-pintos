@@ -17,3 +17,12 @@ goal :
 			-  priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
 			- Recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice
 -			- load_avg = (59/60)*load_avg + (1/60)*ready_threads
+
+
+
+
+devices/timer.c | 42 +++++- 
+threads/fixed-point.h | 120 ++++++++++++++++++ 
+threads/synch.c | 88 ++++++++++++- 
+threads/thread.c | 196 ++++++++++++++++++++++++++---- 
+threads/thread.h | 23 +++

@@ -2,7 +2,7 @@
 
 ALARM CLOCK
 	Creating a double linked list [ sleep_list ] storing the sleeping threads. 
-	The caller of [ thread_block() ] adds itself as [ thread struct element ] and its sleeping time ([ wakeup_tick ]) to the list.
+	The caller of [ thread_block(void) ] adds itself as [ thread struct element ] and its sleeping time ([ wakeup_tick ]) to the list.
 	The [ timer_interrupt ] handler will then loop through the entire global [ sleep_list ] until it's empty to check if it has to be woken up
 		- if so it deletes it from the list and unblocks the thread using [ thread_unblock(struct thread) ]
 		- if not it continues looping through the list
@@ -11,3 +11,10 @@ ALARM CLOCK
 	possible improvement 	: find a way to define a score to sort the list (either by checking the priority or by updating in real time the different wakeup_ticks needed
 
 PRIORITY SCHEDULING
+	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should me the one with the highest priority
+	solution	-> either sort it regularly according to its priority level but have to maintain the queue order among elements within the same level 
+			-> either create a queue per priority level and create a new (or change) the [ ready_list ]	
+	TODO : add a preemption when higher-priority thread arrives. Addition of the check if a higher priority thread is about to be created in [ thread_unblock(struct thread) ] and [ thread_set_priority(struct thread) ].
+		- if so the current thread has to yield and the higher priority thread must be added to the [ ready_list ] as the last element so that it will be dequeued right after
+		- if not just resume add the created thread to the [ ready_list ]
+	TODO : in a semaphore the first out of synchronization must be the one with the highest priority (TO FIX)
