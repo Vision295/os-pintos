@@ -1,14 +1,12 @@
 [] : references of elements in the code itself
 
 ALARM CLOCK
-	Creating a double linked list [ sleep_list ] storing the sleeping threads. 
-	The caller of [ thread_block(void) ] adds itself as [ thread struct element ] and its sleeping time ([ wakeup_tick ]) to the list.
-	The [ timer_interrupt ] handler will then loop through the entire global [ sleep_list ] until it's empty to check if it has to be woken up
-		- if so it deletes it from the list and unblocks the thread using [ thread_unblock(struct thread) ]
-		- if not it continues looping through the list
-	
-	issue with this design	: not using a sorted list so we haveto loop through all the threads in the list to know which one to unblock
-	possible improvement 	: find a way to define a score to sort the list (either by checking the priority or by updating in real time the different wakeup_ticks needed
+	Creating a double linked list [ sleep_list ] storing the sleeping threads, using list.c. 
+	The caller of [ thread_block(void) ] adds itself as [ thread struct element ] and its sleeping time ([ wakeup_tick ]) to the list, using
+	the method [ list_insert_ordered (struct list *list, struct list_elem *elem,list_less_func *less, void *aux) ].
+	The [ timer_interrupt ] handler will then check the first thread on the list and check if its wake up time has arrived. If it's wake up time,
+	it will use [ thread_unblock() ] to wake it up, and go over the following threads on the list until it reaches a thread whose wake up time has not
+	come yet.	
 
 PRIORITY SCHEDULING
 	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should me the one with the highest priority
@@ -25,17 +23,17 @@ PRIORITY SCHEDULING
 		- if so the current thread has to yield and the higher priority thread must be added to the [ ready_list ] as the last element so that it will be dequeued right after
 		- if not just resume add the created thread to the [ ready_list ]
 	TODO : in a semaphore the first out of synchronization must be the one with the highest priority (TO FIX)
-		When a lock is released (sema_up()) we will access lock->semaphore->waiters and delete the waiter with the highest
-		priority from the list. Then, we will use thread_unblock() to activate that thread.
+		When a lock is released ([ sema_up() ]) we will access [lock->semaphore->waiters] and delete the waiter with the highest
+		priority from the list. Then, we will use [ thread_unblock() ] to activate that thread.
 
 	TODO: When a thread lowers its priority such that it no longer has the highest priority, the thread should immediately yield the CPU.
-		- Add a check in thread_set_priority(struct thread) such that when the running thread's priority changes, we will compare it to the 
+		- Add a check in [ thread_set_priority(struct thread) ] such that when the running thread's priority changes, we will compare it to the 
 		priority of the first thread in the ready list and yield the CPU if his priority is higher.  
 
 	TODO: Priority donation to prevent priority inversion (nested priority)
-		The running thread will try to acquire the lock using lock_acquire(lock)
-		We will change lock_acquire() implementation such that
-			it will check if the lock is free using sema_down()
+		The running thread will try to acquire the lock using [ lock_acquire(lock) ]
+		We will change [ lock_acquire() ] implementation such that
+			it will check if the lock is free using [ sema_down() ]
 			if the lock is free, he will take it
 			otherwise, we will check if the thread holding the lock has a lower priority.
 				if yes, we will recursively donate the priority
