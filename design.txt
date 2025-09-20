@@ -25,12 +25,14 @@ PRIORITY SCHEDULING
 		- if so the current thread has to yield and the higher priority thread must be added to the [ ready_list ] as the last element so that it will be dequeued right after
 		- if not just resume add the created thread to the [ ready_list ]
 	TODO : in a semaphore the first out of synchronization must be the one with the highest priority (TO FIX)
+		When a lock is released (sema_up()) we will access lock->semaphore->waiters and delete the waiter with the highest
+		priority from the list. Then, we will use thread_unblock() to activate that thread.
 
 	TODO: When a thread lowers its priority such that it no longer has the highest priority, the thread should immediately yield the CPU.
 		- Add a check in thread_set_priority(struct thread) such that when the running thread's priority changes, we will compare it to the 
 		priority of the first thread in the ready list and yield the CPU if his priority is higher.  
 
-	TODO: Priority donation to prevent priority inversion
+	TODO: Priority donation to prevent priority inversion (nested priority)
 		The running thread will try to acquire the lock using lock_acquire(lock)
 		We will change lock_acquire() implementation such that
 			it will check if the lock is free using sema_down()
@@ -39,4 +41,6 @@ PRIORITY SCHEDULING
 				if yes, we will recursively donate the priority
 				* Need to add a field for struct thread that is pointing at the lock that the thread needs.
 				  We can access the thread that holds the lock through the pointer and recursively donate priority.
-
+		Multiple donations - if multiple threads are donating to the same thread that holds a lock, we need to manage that.
+		solution - Implement a donations list which is always sorted. When a donation is made, we will add the donation to the list.
+				when the thread that donated the priority stops waiting, we will erase its priority value from the list (should be the top of the list) 
