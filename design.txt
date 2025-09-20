@@ -14,7 +14,29 @@ PRIORITY SCHEDULING
 	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should me the one with the highest priority
 	solution	-> either sort it regularly according to its priority level but have to maintain the queue order among elements within the same level 
 			-> either create a queue per priority level and create a new (or change) the [ ready_list ]	
+	
+	Alternative solution:
+	Everytime we insert a thread to the ready list we need to insert it in the correct location. We can use the built in function list_insert_ordered() 
+	We will replace list_push_back() with list_insert_ordered(), that way the threads will always be sorted, and when we pop a thread it will pop the
+	thread with the highest priority.
+	list_push_back() is being called in thread_Unblock(), thread_yield(), init_thread()   
+	
 	TODO : add a preemption when higher-priority thread arrives. Addition of the check if a higher priority thread is about to be created in [ thread_unblock(struct thread) ] and [ thread_set_priority(struct thread) ].
 		- if so the current thread has to yield and the higher priority thread must be added to the [ ready_list ] as the last element so that it will be dequeued right after
 		- if not just resume add the created thread to the [ ready_list ]
 	TODO : in a semaphore the first out of synchronization must be the one with the highest priority (TO FIX)
+
+	TODO: When a thread lowers its priority such that it no longer has the highest priority, the thread should immediately yield the CPU.
+		- Add a check in thread_set_priority(struct thread) such that when the running thread's priority changes, we will compare it to the 
+		priority of the first thread in the ready list and yield the CPU if his priority is higher.  
+
+	TODO: Priority donation to prevent priority inversion
+		The running thread will try to acquire the lock using lock_acquire(lock)
+		We will change lock_acquire() implementation such that
+			it will check if the lock is free using sema_down()
+			if the lock is free, he will take it
+			otherwise, we will check if the thread holding the lock has a lower priority.
+				if yes, we will recursively donate the priority
+				* Need to add a field for struct thread that is pointing at the lock that the thread needs.
+				  We can access the thread that holds the lock through the pointer and recursively donate priority.
+
