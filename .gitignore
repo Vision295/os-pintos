@@ -3,15 +3,16 @@
 
 !.gitignore
 !README.md
+!design.txt
 
 # THREADS directory
-!threads/init.c
-!threads/init.h
+!src/threads/init.c
+!src/threads/init.h
 
-!threads/thread.c
-!threads/thread.h
+!src/threads/thread.c
+!src/threads/thread.h
 
 # DEVICES directory
-!devices/timer.c
-!devices/timer.h
+!src/devices/timer.c
+!src/devices/timer.h
 
