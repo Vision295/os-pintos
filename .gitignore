@@ -17,6 +17,8 @@
 !src/threads/thread.c
 !src/threads/thread.h
 
+!src/threads/synch.c
+
 # DEVICES directory
 !src/devices/timer.c
 !src/devices/timer.h
