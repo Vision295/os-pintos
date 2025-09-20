@@ -5,6 +5,11 @@
 !README.md
 !design.txt
 
+
+!src/
+!src/threads/
+!src/devices/
+
 # THREADS directory
 !src/threads/init.c
 !src/threads/init.h
