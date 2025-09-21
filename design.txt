@@ -11,7 +11,7 @@ ALARM CLOCK
 PRIORITY SCHEDULING
 	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should me the one with the highest priority
 	solution	-> either sort it regularly according to its priority level but have to maintain the queue order among elements within the same level 
-			-> either create a queue per priority level and create a new (or change) the [ ready_list ]	
+				-> either create a queue per priority level and create a new (or change) the [ ready_list ]	
 	
 	Alternative solution:
 	Everytime we insert a thread to the ready list we need to insert it in the correct location. We can use the built in function list_insert_ordered() 
@@ -22,23 +22,37 @@ PRIORITY SCHEDULING
 	TODO : add a preemption when higher-priority thread arrives. Addition of the check if a higher priority thread is about to be created in [ thread_unblock(struct thread) ] and [ thread_set_priority(struct thread) ].
 		- if so the current thread has to yield and the higher priority thread must be added to the [ ready_list ] as the last element so that it will be dequeued right after
 		- if not just resume add the created thread to the [ ready_list ]
+		
 	TODO : in a semaphore the first out of synchronization must be the one with the highest priority (TO FIX)
-		When a lock is released ([ sema_up() ]) we will access [lock->semaphore->waiters] and delete the waiter with the highest
+		When a lock is released ([ sema_up() ]) we will access [ lock->semaphore->waiters ] and delete the waiter with the highest
 		priority from the list. Then, we will use [ thread_unblock() ] to activate that thread.
 
 	TODO: When a thread lowers its priority such that it no longer has the highest priority, the thread should immediately yield the CPU.
-		- Add a check in [ thread_set_priority(struct thread) ] such that when the running thread's priority changes, we will compare it to the 
-		priority of the first thread in the ready list and yield the CPU if his priority is higher.  
+		- Add a check in [ thread_set_priority(struct thread) ] such that when the running thread's priority changes,
+		we will compare it to the priority of the first thread in the ready list and yield the CPU if its priority is higher.  
 
 	TODO: Priority donation to prevent priority inversion (nested priority)
 		The running thread will try to acquire the lock using [ lock_acquire(lock) ]
-		We will change [ lock_acquire() ] implementation such that
-			it will check if the lock is free using [ sema_down() ]
-			if the lock is free, he will take it
-			otherwise, we will check if the thread holding the lock has a lower priority.
-				if yes, we will recursively donate the priority
+		We will change [ lock_acquire() ] implementation such that it will check if the lock is free using [ sema_down() ]
+			- if the lock is free, he will take it
+			- otherwise, we will check if the thread holding the lock has a lower priority.
+				if yes, we will recursively donate the priority.
 				* Need to add a field for struct thread that is pointing at the lock that the thread needs.
 				  We can access the thread that holds the lock through the pointer and recursively donate priority.
-		Multiple donations - if multiple threads are donating to the same thread that holds a lock, we need to manage that.
-		solution - Implement a donations list which is always sorted. When a donation is made, we will add the donation to the list.
-				when the thread that donated the priority stops waiting, we will erase its priority value from the list (should be the top of the list) 
+		Multiple donations - if multiple threads are donating to the same thread that holds a lock, we need to manage that.*
+		solution 	- Implement a donations list which is always sorted. When a donation is made, we will add the donation to the list.
+					when the thread that donated the priority stops waiting, we will erase its priority value from the list (should be the top of the list) 
+
+ADVANCED SCHEDULER : 
+	we set [ TIMER_FREQ ] to be the number of ticks per update
+	TODO : create [ list_priority_queues ] where [ PRI_MIN + PRI_MAX + 1 ] = 64 = [ sizeof(list_priority_queues) ] on the boot of the os.
+
+	TODO :	every second update 
+		- [ load_avg ] every second [ mlfqs_update_load_avg() ] (what about blocked threads ?)
+		- [ recent_cpu ] and [ priority ] of every threads (even the blocked ones) according to the formulas. [ mlfqs_update_recent_cpu(thread t) ] and [ mlfqs_update_priority(thread t) ]
+			every 4 ticks update
+		- [ priority ] of every threads according to the formulas
+	
+	TODO : update the [ schedule() ] function so that it updates the next thread to schedule by looping through the [ list_priority_queues ]
+
+	TODO : preemption if a higher priority thread is in a ready queue -> yield the current thread
