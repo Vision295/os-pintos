@@ -46,13 +46,34 @@ PRIORITY SCHEDULING
 ADVANCED SCHEDULER : 
 	we set [ TIMER_FREQ ] to be the number of ticks per update
 	TODO : create [ list_priority_queues ] where [ PRI_MIN + PRI_MAX + 1 ] = 64 = [ sizeof(list_priority_queues) ] on the boot of the os.
-
+	TODO : If the user sets [ thread_mlfqs = true ], the scheduling will be done using MLFQS. 
+	TODO : New functions or modifications for the state of using MLFQS:
+			Inserting a thread to the correct priority queue
+			Returning the next thread to run
+				- Go over the queues starting with the highest priority until finding a non-empty queue
+			Change the [ thread_yield() ] function to adapt to the 2 different scenarios 
+	TODO : Add [ int nice ] field to thread.c
+		- Must be an integer between -20 and 20
+		- Initially 0
+		- Implement the functions [ thread_get_nice(), thread_set_nice() ]
+	TODO : Add [ int recent_cpu] field to thread.c
+		- Initially 0, or the value of the parent thread.
+		- May be negative
+		- Needs to be rounded down
+		- Implement the function [ thread_get_recent_cpu() ]
+		- Each time a timer interrupt occurs, recent_cpu is incremented by 1 for the 
+					running thread only, unless the idle thread is running.
+	TODO : Add global variable [ load_avg ] to thread.h
+		- Initially 0
+		- Implement the function [ thread_get_load_avg() ]
 	TODO :	every second update 
 		- [ load_avg ] every second [ mlfqs_update_load_avg() ] (what about blocked threads ?)
 		- [ recent_cpu ] and [ priority ] of every threads (even the blocked ones) according to the formulas. [ mlfqs_update_recent_cpu(thread t) ] and [ mlfqs_update_priority(thread t) ]
 			every 4 ticks update
 		- [ priority ] of every threads according to the formulas
-	
-	TODO : update the [ schedule() ] function so that it updates the next thread to schedule by looping through the [ list_priority_queues ]
+			- Should be between 0 and 63
+		- Yield the CPU if a thread was added to a higher priority queue than the current
+	TODO : update the [ next_thread_to_run() ] function so that it updates the next thread to schedule by looping through the [ list_priority_queues ]
 
 	TODO : preemption if a higher priority thread is in a ready queue -> yield the current thread
+	TODO : If multiple threads are in the same priority queue, we need to schedule them using round robin, using [ thread_tick() ]
