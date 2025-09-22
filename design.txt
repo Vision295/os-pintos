@@ -10,11 +10,7 @@ ALARM CLOCK
 
 PRIORITY SCHEDULING
 	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should be the one with the highest priority
-	solution	-> either sort it regularly according to its priority level but have to maintain the queue order among elements within the same level 
-				-> either create a queue per priority level and create a new (or change) the [ ready_list ]	
-	
-	Alternative solution:
-	Everytime we insert a thread to the ready list we need to insert it in the correct location. We can use the built in function list_insert_ordered() 
+	solution : Everytime we insert a thread to the ready list we need to insert it in the correct location. We can use the built in function list_insert_ordered() 
 	We will replace list_push_back() with list_insert_ordered(), that way the threads will always be sorted, and when we pop a thread it will pop the
 	thread with the highest priority.
 	list_push_back() is being called in thread_Unblock(), thread_yield(), init_thread()   
@@ -39,9 +35,13 @@ PRIORITY SCHEDULING
 				if yes, we will recursively donate the priority.
 				* Need to add a field for struct thread that is pointing at the lock that the thread needs.
 				  We can access the thread that holds the lock through the pointer and recursively donate priority.
-		Multiple donations - if multiple threads are donating to the same thread that holds a lock, we need to manage that.*
-		solution 	- Implement a donations list which is always sorted. When a donation is made, we will add the donation to the list.
-					when the thread that donated the priority stops waiting, we will erase its priority value from the list (should be the top of the list) 
+		After the lock is released - We will implement a mechanism that resets the priority of the thread that received the donation.
+		Multiple donations - if multiple threads are donating to the same thread that holds a lock, we need to manage that.
+				* The problem is that a certain thread may hold multiple locks, and get donations for them. Then when
+					it releases one of them, the thread needs to know what value he should reset its own priority to.
+		solution 	- The thread that is receiving donations will keep a list of all the donations it got. Once it releases a lock,
+						it will erase from the list all the donations that he got for releasing that lock.
+						Then, it will reset its priority to the max between its initial priority, or the max priority in the donations list.   
 
 ADVANCED SCHEDULER : 
 	we set [ TIMER_FREQ ] to be the number of ticks per update
