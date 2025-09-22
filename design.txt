@@ -2,14 +2,14 @@
 
 ALARM CLOCK
 	Creating a double linked list [ sleep_list ] storing the sleeping threads, using list.c. 
-	The caller of [ thread_block(void) ] adds itself as [ thread struct element ] and its sleeping time ([ wakeup_tick ]) to the list, using
-	the method [ list_insert_ordered (struct list *list, struct list_elem *elem,list_less_func *less, void *aux) ].
+	The caller of [ thread_block(void) ] adds itself as [ struct threaa delement ] and its sleeping time ([ wakeup_tick ]) to the list, using
+	the method [ list_insert_ordered (struct list *list, struct list_elem *elem, list_less_func *less, void *aux) ].
 	The [ timer_interrupt ] handler will then check the first thread on the list and check if its wake up time has arrived. If it's wake up time,
 	it will use [ thread_unblock() ] to wake it up, and go over the following threads on the list until it reaches a thread whose wake up time has not
 	come yet.	
 
 PRIORITY SCHEDULING
-	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should me the one with the highest priority
+	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should be the one with the highest priority
 	solution	-> either sort it regularly according to its priority level but have to maintain the queue order among elements within the same level 
 				-> either create a queue per priority level and create a new (or change) the [ ready_list ]	
 	
