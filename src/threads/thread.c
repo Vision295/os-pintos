@@ -200,7 +200,8 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  // Checking if the thread has a higher priority than the current
+  check_preemtion();
   return tid;
 }
 
@@ -237,9 +238,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, list_less_func *less_priority, NULL);
+  //list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+  
 }
 
 /* Returns the name of the running thread. */
@@ -296,6 +299,22 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
+void check_preemtion(){
+  if(!list_empty(&reay_list)){
+    struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
+    if(t->priority > thread_current()->priority){
+      thread_yield();
+    }
+  }
+}
+
+bool less_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  struct thread *threadA = list_entry(a, struct thread, elem);
+  struct thread *threadB = list_entry(b, struct thread, elem);
+  return threadA->priority > threadB->priority;
+}
+
+
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
 void
@@ -308,7 +327,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, list_less_func *less_priority, NULL);
+    //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -336,6 +356,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  check_preemtion();
 }
 
 /* Returns the current thread's priority. */
