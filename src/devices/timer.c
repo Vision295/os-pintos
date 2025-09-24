@@ -29,6 +29,14 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
+// ALARM CLOCK
+static struct list sleep_list; // global list of sleeping threads
+/* --- forward declarations --- */
+static bool wakeup_less (const struct list_elem *a,
+                         const struct list_elem *b,
+                         void *aux);
+static void timer_wakeup (void);
+
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -37,6 +45,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleep_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -90,50 +99,60 @@ timer_sleep (int64_t ticks)
 {
   int64_t start = timer_ticks ();
 
+  // preivously busy waiting
   ASSERT (intr_get_level () == INTR_ON);
+  /*
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
+  */
+
+  if (ticks <= 0)
+    return;
+
+  enum intr_level old_level = intr_disable (); // disable interrupts
+
+  struct thread *cur = thread_current ();
+  cur->wakeup_tick = start + ticks;
+
+  /* Insert into sleep list ordered by wakeup_tick. */
+  list_insert_ordered (&sleep_list, &cur->sleep_elem, wakeup_less, NULL);
+  thread_block (); // block until unblocked later
+
+  intr_set_level (old_level); // restore interrupt state
 }
 
-
-// TODO : fix this (not ready yet)
-/*
-struct sleep_thread {
-    struct list_elem elem;
-    struct thread *t;
-    int64_t wakeup_tick;
-};
-
-static struct list sleep_list; // global list of sleeping threads
-
-void timer_sleep(int64_t ticks) {
-    int64_t start = timer_ticks();
-    struct sleep_thread st;
-    st.t = thread_current();
-    st.wakeup_tick = start + ticks;
-
-    list_push_back(&sleep_list, &st.elem);
-    thread_block(); // blocks until unblocked later
+// ALARM CLOCK
+/* Comparator for ordered insert by wakeup_tick. */
+static bool
+wakeup_less (const struct list_elem *a,
+             const struct list_elem *b,
+             void *aux UNUSED) 
+{
+  struct thread *ta = list_entry(a, struct thread, sleep_elem);
+  struct thread *tb = list_entry(b, struct thread, sleep_elem);
+  return ta->wakeup_tick < tb->wakeup_tick;
 }
 
-// Call this in timer interrupt handler (timer tick)
-void timer_interrupt(void) {
-    thread_tick(); // usual timer bookkeeping
+// ALARM CLOCK
+/* Called every timer tick (in timer_interrupt). */
+static void
+timer_wakeup (void) 
+{
+  int64_t now = timer_ticks ();
 
-    int64_t now = timer_ticks();
-    struct list_elem *e = list_begin(&sleep_list);
-    while (e != list_end(&sleep_list)) {
-        struct sleep_thread *st = list_entry(e, struct sleep_thread, elem);
-        struct list_elem *next = list_next(e);
+  /* Because list is ordered, stop as soon as wakeup_tick > now. */
+  while (!list_empty (&sleep_list)) {
+    struct thread *t = list_entry (list_front (&sleep_list),
+                                   struct thread, sleep_elem);
+    if (t->wakeup_tick > now)
+      break;
 
-        if (st->wakeup_tick <= now) {
-            list_remove(e);
-            thread_unblock(st->t); // wake the thread
-        }
-        e = next;
-    }
+    list_pop_front (&sleep_list);
+    thread_unblock (t);
+    if (!intr_context ())   // don’t yield inside interrupt
+    thread_yield ();
+  }
 }
-*/
 
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -212,6 +231,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  // ALARM CLOCK
+  timer_wakeup ();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
