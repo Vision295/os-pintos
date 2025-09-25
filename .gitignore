@@ -19,6 +19,7 @@
 
 !src/threads/synch.c
 
+!src/threads/fixed_point.h
 # DEVICES directory
 !src/devices/timer.c
 !src/devices/timer.h

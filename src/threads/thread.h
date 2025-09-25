@@ -156,6 +156,12 @@ bool less_priority(const struct list_elem *a,
                    void *aux UNUSED);
 //MLFQS
 void mlfqs_init(void);
-static struct thread *mlfqs_next_thread_to_run (void);
 void mlfqs_insert(struct thread *t);
+void mlfqs_update_recent_cpu(struct thread *t);
+void mlfqs_update_priority(struct thread *t);
+void mlfqs_update_load_avg(void);
+
+
+
+
 #endif /* threads/thread.h */
