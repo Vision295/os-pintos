@@ -24,6 +24,13 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+// MLFQS
+/* Nice priorities*/
+#define NICE_MIN -20
+#define NICE_DEFAULT 0
+#define NICE_MAX 20
+
+#define RECENT_CPU_DEFAULT 0
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -92,7 +99,9 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-
+    // MLFQS
+    int nice;
+    int recent_cpu;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -109,6 +118,7 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+extern int load_avg;
 
 void thread_init (void);
 void thread_start (void);
@@ -144,4 +154,8 @@ void check_preemtion(void);
 bool less_priority(const struct list_elem *a,
                    const struct list_elem *b,
                    void *aux UNUSED);
+//MLFQS
+void mlfqs_init(void);
+static struct thread *mlfqs_next_thread_to_run (void);
+void mlfqs_insert(struct thread *t);
 #endif /* threads/thread.h */
