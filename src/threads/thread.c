@@ -200,6 +200,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  // PRIORITY SCHEDULER
   // Checking if the thread has a higher priority than the current
   check_preemtion();
   return tid;
@@ -238,7 +239,9 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, list_less_func *less_priority, NULL);
+  // PRIORITY SCHEDULER
+  list_insert_ordered (&ready_list, &t->elem, *less_priority, NULL);
+  check_preemtion();
   //list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -299,8 +302,10 @@ thread_exit (void)
   NOT_REACHED ();
 }
 
+// PRIORITY SCHEDULER
+/*yields thread if higher priority in ready queue*/
 void check_preemtion(){
-  if(!list_empty(&reay_list)){
+  if(!list_empty(&ready_list)){
     struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
     if(t->priority > thread_current()->priority){
       thread_yield();
@@ -308,6 +313,7 @@ void check_preemtion(){
   }
 }
 
+// PRIORITY SCHEDULER
 bool less_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   struct thread *threadA = list_entry(a, struct thread, elem);
   struct thread *threadB = list_entry(b, struct thread, elem);
@@ -327,7 +333,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered (&ready_list, &cur->elem, list_less_func *less_priority, NULL);
+    // PRIORITY SCHEDULER
+    list_insert_ordered (&ready_list, &cur->elem, *less_priority, NULL);
     //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
@@ -356,6 +363,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  // PRIORITY SCHEDULER
   check_preemtion();
 }
 
@@ -486,6 +494,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
+  // PRIORITY SCHEDULER
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
 }
