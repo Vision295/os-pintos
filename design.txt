@@ -9,21 +9,21 @@ ALARM CLOCK
 	come yet.	
 
 PRIORITY SCHEDULING
-	TODO : manage the [ ready_list ] so that it is sorted along the priorties : first element should be the one with the highest priority
+	DONE : manage the [ ready_list ] so that it is sorted along the priorties : first element should be the one with the highest priority
 	solution : Everytime we insert a thread to the ready list we need to insert it in the correct location. We can use the built in function list_insert_ordered() 
 	We will replace list_push_back() with list_insert_ordered(), that way the threads will always be sorted, and when we pop a thread it will pop the
 	thread with the highest priority.
 	list_push_back() is being called in thread_Unblock(), thread_yield(), init_thread()   
 	
-	TODO : add a preemption when higher-priority thread arrives. Addition of the check if a higher priority thread is about to be created in [ thread_unblock(struct thread) ] and [ thread_set_priority(struct thread) ].
+	DONE : add a preemption when higher-priority thread arrives. Addition of the check if a higher priority thread is about to be created in [ thread_unblock(struct thread) ] and [ thread_set_priority(struct thread) ].
 		- if so the current thread has to yield and the higher priority thread must be added to the [ ready_list ] as the last element so that it will be dequeued right after
 		- if not just resume add the created thread to the [ ready_list ]
 		
-	TODO : in a semaphore the first out of synchronization must be the one with the highest priority (TO FIX)
+	DONE : in a semaphore the first out of synchronization must be the one with the highest priority (TO FIX)
 		When a lock is released ([ sema_up() ]) we will access [ lock->semaphore->waiters ] and delete the waiter with the highest
 		priority from the list. Then, we will use [ thread_unblock() ] to activate that thread.
 
-	TODO: When a thread lowers its priority such that it no longer has the highest priority, the thread should immediately yield the CPU.
+	DONE : When a thread lowers its priority such that it no longer has the highest priority, the thread should immediately yield the CPU.
 		- Add a check in [ thread_set_priority(struct thread) ] such that when the running thread's priority changes,
 		we will compare it to the priority of the first thread in the ready list and yield the CPU if its priority is higher.  
 
