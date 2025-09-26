@@ -210,7 +210,7 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
   // PRIORITY SCHEDULER
   // Checking if the thread has a higher priority than the current
-  check_preemtion();
+  check_preemption();
   return tid;
 }
 
@@ -248,12 +248,12 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   // PRIORITY SCHEDULER
-  list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
-  check_preemtion();
-  //list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
+  list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
+  if(old_level == INTR_ON)
+    check_preemption();
+  //list_push_back (&ready_list, &t->elem);
   intr_set_level (old_level);
-  
 }
 
 /* Returns the name of the running thread. */
@@ -312,11 +312,13 @@ thread_exit (void)
 
 // PRIORITY SCHEDULER
 /*yields thread if higher priority in ready queue*/
-void check_preemtion(){
+void check_preemption(){
+  if(intr_context() || thread_current() == NULL)
+    return;
   if(!list_empty(&ready_list)){
     struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
     if(t->priority > thread_current()->priority){
-      thread_yield();
+      intr_yield_on_return();
     }
   }
 }
@@ -372,7 +374,7 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
   // PRIORITY SCHEDULER
-  check_preemtion();
+  check_preemption();
 }
 
 /* Returns the current thread's priority. */
