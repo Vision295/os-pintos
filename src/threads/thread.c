@@ -313,12 +313,14 @@ thread_exit (void)
 // PRIORITY SCHEDULER
 /*yields thread if higher priority in ready queue*/
 void check_preemption(){
-  if(intr_context() || thread_current() == NULL)
-    return;
   if(!list_empty(&ready_list)){
     struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
     if(t->priority > thread_current()->priority){
-      intr_yield_on_return();
+      if (intr_context ()) {
+        intr_yield_on_return ();
+      } else {
+        thread_yield ();
+      }
     }
   }
 }
