@@ -18,6 +18,7 @@
 !src/threads/thread.h
 
 !src/threads/synch.c
+!src/threads/synch.h
 
 !src/threads/fixed_point.h
 # DEVICES directory
