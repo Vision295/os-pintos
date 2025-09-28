@@ -62,7 +62,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
-struct list mlfqs_list[PRI_MIN + PRI_MAX + 1];
+struct list mlfqs_list[PRI_MAX - PRI_MIN + 1];
 
 
 static void kernel_thread (thread_func *, void *aux);
@@ -142,7 +142,11 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  /* Enforce preemption. */
+  // MLFQS
+  if (thread_mlfqs && t != idle_thread) {  // Incrementing recent cpu by 1
+    t->recent_cpu = fp_add_int(t->recent_cpu, 1);
+  }
+    /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
 }
@@ -249,7 +253,11 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   // PRIORITY SCHEDULER
   t->status = THREAD_READY;
-  list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
+  if(!thread_mlfqs){
+    list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
+  } else {
+    mlfqs_insert(t);
+  }
   if(old_level == INTR_ON)
     check_preemption();
   //list_push_back (&ready_list, &t->elem);
@@ -344,7 +352,12 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
     // PRIORITY SCHEDULER
-    list_insert_ordered (&ready_list, &cur->elem, less_priority, NULL);
+    if(!thread_mlfqs){
+      list_insert_ordered (&ready_list, &cur->elem, less_priority, NULL);
+    } else {
+    // MLFQS
+      mlfqs_insert(cur);
+    }
     //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
@@ -511,13 +524,15 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   //MLFQS
   if(thread_mlfqs){
-    if (thread_current() != NULL){  // Inheritence
-      t->nice = thread_get_nice();
-      t->recent_cpu = thread_get_recent_cpu();
-    } else { // Otherwise default
+    if(t == initial_thread){
       t->nice = NICE_DEFAULT;
       t->recent_cpu = RECENT_CPU_DEFAULT;
+    } else { // Otherwise default
+      struct thread *parent = thread_current();
+      t->nice = parent->nice;
+      t->recent_cpu = parent->recent_cpu;
     }
+     mlfqs_update_priority(t);
   }
   old_level = intr_disable ();
   // PRIORITY SCHEDULER
@@ -609,7 +624,7 @@ static void
 schedule (void) 
 {
   struct thread *cur = running_thread ();
-  struct thread *next = next_thread_to_run ();
+  struct thread *next = (thread_mlfqs ? mlfqs_next_thread_to_run() : next_thread_to_run ());
   struct thread *prev = NULL;
 
   ASSERT (intr_get_level () == INTR_OFF);
@@ -651,7 +666,7 @@ mlfqs_next_thread_to_run (void)
 {
   for (int i = PRI_MAX; i >= PRI_MIN; i--){
     if (!list_empty(&mlfqs_list[i])){
-      return list_entry(list_front(&mlfqs_list[i]), struct thread, elem);
+      return list_entry(list_pop_front(&mlfqs_list[i]), struct thread, elem);
     }
   }
   return idle_thread;
@@ -662,7 +677,9 @@ void mlfqs_insert(struct thread *t){
   list_push_back (&mlfqs_list[t_priority], &t->elem);
 }
 
-void mlfqs_update_recent_cpu(struct thread *t){
+void mlfqs_update_recent_cpu(struct thread *t, void *aux){
+  if (t == idle_thread)
+    return;
   int numerator = fp_mul_int(load_avg, 2);
   int denominator = fp_add_int(numerator, 1);
   int coef = fp_div(numerator, denominator);
@@ -671,8 +688,10 @@ void mlfqs_update_recent_cpu(struct thread *t){
   t->recent_cpu = val;
 }
 
-void mlfqs_update_priority(struct thread *t){
+void mlfqs_update_priority(struct thread *t, void *aux){
   //priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+  if (t == idle_thread)
+    return;
   int middle = fp_to_int(fp_div_int(t->recent_cpu, 4));
   int new_priority = PRI_MAX - middle - (t->nice * 2);
   if (new_priority > PRI_MAX)
@@ -682,13 +701,31 @@ void mlfqs_update_priority(struct thread *t){
   t->priority = new_priority;
 }
 
-void mlfqs_update_load_avg(){
-  int ready_threads = list_size(&ready_list); //MAKE SURE IT IS STILL UPDATED
-  if (thread_current() != idle_thread)
-    ready_threads += 1;
+void mlfqs_update_load_avg(void){
+  int ready_threads = mlfqs_ready_threads(); //MAKE SURE IT IS STILL UPDATED
   int coef = fp_div_int(int_to_fp(59), 60);
   int a = fp_mul(coef, load_avg);
   int sec_coef = fp_div_int(int_to_fp(1), 60);
   int b = fp_mul(sec_coef, ready_threads);
-  load_avg = a + b;
+  load_avg = fp_add(a , b);
 }
+
+void mlfqs_update_rcpu_la(void){
+  thread_foreach(mlfqs_update_recent_cpu, NULL);
+  mlfqs_update_load_avg();
+}
+
+void mlfqs_update_priority_all(void){
+  thread_foreach(mlfqs_update_priority, NULL);
+}
+
+int mlfqs_ready_threads(void) {
+  int counter = 0;
+  for (int i = PRI_MIN; i <= PRI_MAX; i++) {
+    counter += list_size(&mlfqs_list[i]);
+  }
+  if (thread_current() != idle_thread)
+    counter++;
+  return counter;
+}
+

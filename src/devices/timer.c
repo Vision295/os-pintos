@@ -98,14 +98,12 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-
   // preivously busy waiting
   ASSERT (intr_get_level () == INTR_ON);
   /*
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
   */
-
   if (ticks <= 0)
     return;
 
@@ -233,6 +231,15 @@ timer_interrupt (struct intr_frame *args UNUSED)
   thread_tick ();
   // ALARM CLOCK
   timer_wakeup ();
+  // MLFQS
+  if(thread_mlfqs){
+    if(timer_ticks() % 4 == 0){  // Updates priority every 4 time ticks
+      mlfqs_update_priority_all();
+    }
+    if(timer_ticks() % TIMER_FREQ == 0){ // Updates recent cpu and load avg every second
+      mlfqs_update_rcpu_la();
+    }
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
