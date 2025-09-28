@@ -98,6 +98,11 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    // PRIORITY SCHEDULER
+    int base_priority;           /* Original priority */
+    struct lock *waiting_lock;   /* The lock this thread is currently waiting on */
+    struct list locks;           /* Locks currently held by this thread */
+
     struct list_elem allelem;           /* List element for all threads list. */
     // MLFQS
     int nice;

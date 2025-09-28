@@ -509,6 +509,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  // PRIORITY SCHEDULER
+  t->base_priority = t->priority;
+  t->waiting_lock = NULL;
+  list_init(&t->locks);
+
   t->magic = THREAD_MAGIC;
   //MLFQS
   if(thread_mlfqs){
