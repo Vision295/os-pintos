@@ -250,8 +250,7 @@ thread_unblock (struct thread *t)
   // PRIORITY SCHEDULER
   t->status = THREAD_READY;
   list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
-  if(old_level == INTR_ON)
-    check_preemption();
+  //if(old_level == INTR_ON) check_preemption();
   //list_push_back (&ready_list, &t->elem);
   intr_set_level (old_level);
 }
