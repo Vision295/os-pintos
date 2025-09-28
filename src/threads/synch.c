@@ -32,6 +32,13 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+// PRIORITY SCHEDULER
+static bool
+cond_sema_priority_cmp (const struct list_elem *a,
+                        const struct list_elem *b,
+                        void *aux UNUSED);
+
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -69,7 +76,7 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       // PRIORITY SCHEDULER
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem, *less_priority, NULL);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, less_priority, NULL);
       //list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
@@ -111,16 +118,19 @@ void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
+  struct thread * to_unblock;
 
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+    to_unblock = list_entry (list_pop_front (&sema->waiters),struct thread, elem);
+    thread_unblock (to_unblock);
   }
   sema->value++;
   intr_set_level (old_level);
+  // PRIORITY SCHEDULER
+  check_preemption();
 }
 
 
@@ -269,6 +279,24 @@ cond_init (struct condition *cond)
   list_init (&cond->waiters);
 }
 
+// PRIORITY SCHEDULER
+bool
+cond_sema_priority_cmp (const struct list_elem *a,
+                        const struct list_elem *b,
+                        void *aux UNUSED) 
+{
+  struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
+
+  /* Each semaphore has its own waiters list; the first is the thread blocked on it. */
+  struct thread *ta = list_entry (list_front (&sa->semaphore.waiters),
+                                  struct thread, elem);
+  struct thread *tb = list_entry (list_front (&sb->semaphore.waiters),
+                                  struct thread, elem);
+
+  return ta->priority < tb->priority;  /* lower means less priority */
+}
+
 /* Atomically releases LOCK and waits for COND to be signaled by
    some other piece of code.  After COND is signaled, LOCK is
    reacquired before returning.  LOCK must be held before calling
@@ -300,10 +328,15 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
+  // PRIORITY SCHEDULER
+  //list_insert_ordered (&cond->waiters, &waiter.elem, cond_sema_priority_cmp, NULL);
   list_push_back (&cond->waiters, &waiter.elem);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
+  
+  // PRIORITY SCHEDULER
+  check_preemption();
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
@@ -321,9 +354,14 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  if (!list_empty (&cond->waiters)) {
+    // PRIORITY SCHEDULER
+    //sema_up (&list_entry (list_pop_front (&cond->waiters),
+    //                      struct semaphore_elem, elem)->semaphore);
+    struct list_elem *max_e = list_max (&cond->waiters, cond_sema_priority_cmp, NULL);
+    list_remove (max_e);
+    sema_up (&list_entry (max_e, struct semaphore_elem, elem)->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

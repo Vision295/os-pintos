@@ -253,13 +253,14 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   // PRIORITY SCHEDULER
   t->status = THREAD_READY;
+  list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
   if(!thread_mlfqs){
     list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
   } else {
     mlfqs_insert(t);
   }
-  if(old_level == INTR_ON)
-    check_preemption();
+  //if(old_level == INTR_ON)
+    //check_preemption();
   //list_push_back (&ready_list, &t->elem);
   intr_set_level (old_level);
 }
@@ -321,12 +322,14 @@ thread_exit (void)
 // PRIORITY SCHEDULER
 /*yields thread if higher priority in ready queue*/
 void check_preemption(){
-  if(intr_context() || thread_current() == NULL)
-    return;
   if(!list_empty(&ready_list)){
     struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
     if(t->priority > thread_current()->priority){
-      intr_yield_on_return();
+      if (intr_context ()) {
+        intr_yield_on_return ();
+      } else {
+        thread_yield ();
+      }
     }
   }
 }
@@ -521,6 +524,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  // PRIORITY SCHEDULER
+  t->base_priority = t->priority;
+  t->waiting_lock = NULL;
+  list_init(&t->locks);
+
   t->magic = THREAD_MAGIC;
   //MLFQS
   if(thread_mlfqs){
