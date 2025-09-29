@@ -162,10 +162,14 @@ bool less_priority(const struct list_elem *a,
 //MLFQS
 void mlfqs_init(void);
 void mlfqs_insert(struct thread *t);
-void mlfqs_update_recent_cpu(struct thread *t);
-void mlfqs_update_priority(struct thread *t);
+void mlfqs_update_recent_cpu(struct thread *t, void *aux);
+void mlfqs_update_priority(struct thread *t, void *aux);
 void mlfqs_update_load_avg(void);
-
+void mlfqs_update_rcpu_la(void);
+void mlfqs_update_priority_all(void);
+int mlfqs_ready_threads(void);
+void mlfqs_check_preemption(void);
+void mlfqs_reorganize_queues(void);
 
 
 

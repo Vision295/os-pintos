@@ -137,9 +137,9 @@ static void
 timer_wakeup (void) 
 {
   int64_t now = timer_ticks ();
-
   /* Because list is ordered, stop as soon as wakeup_tick > now. */
   while (!list_empty (&sleep_list)) {
+    
     struct thread *t = list_entry (list_front (&sleep_list),
                                    struct thread, sleep_elem);
     if (t->wakeup_tick > now)
@@ -235,9 +235,11 @@ timer_interrupt (struct intr_frame *args UNUSED)
   if(thread_mlfqs){
     if(timer_ticks() % 4 == 0){  // Updates priority every 4 time ticks
       mlfqs_update_priority_all();
+      mlfqs_check_preemption();
     }
     if(timer_ticks() % TIMER_FREQ == 0){ // Updates recent cpu and load avg every second
       mlfqs_update_rcpu_la();
+      //printf("DEBUG: Updated load_avg to %d\n", thread_get_load_avg());
     }
   }
 }

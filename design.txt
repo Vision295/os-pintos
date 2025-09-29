@@ -45,8 +45,8 @@ PRIORITY SCHEDULING
 
 ADVANCED SCHEDULER : 
 	we set [ TIMER_FREQ ] to be the number of ticks per update
-	TODO : create [ list_priority_queues ] where [ PRI_MIN + PRI_MAX + 1 ] = 64 = [ sizeof(list_priority_queues) ] on the boot of the os.
-	TODO : If the user sets [ thread_mlfqs = true ], the scheduling will be done using MLFQS. 
+	DONE : create [ list_priority_queues ] where [ PRI_MIN + PRI_MAX + 1 ] = 64 = [ sizeof(list_priority_queues) ] on the boot of the os.
+	DONE : If the user sets [ thread_mlfqs = true ], the scheduling will be done using MLFQS. 
 	TODO : New functions or modifications for the state of using MLFQS:
 			Inserting a thread to the correct priority queue
 			Returning the next thread to run
@@ -98,11 +98,11 @@ pass tests/threads/priority-preempt
 pass tests/threads/priority-sema
 pass tests/threads/priority-condvar
 FAIL tests/threads/priority-donate-chain
-FAIL tests/threads/mlfqs-load-1
+PASS tests/threads/mlfqs-load-1
 FAIL tests/threads/mlfqs-load-60
 FAIL tests/threads/mlfqs-load-avg
 FAIL tests/threads/mlfqs-recent-1
-FAIL tests/threads/mlfqs-fair-2
+PASS tests/threads/mlfqs-fair-2
 FAIL tests/threads/mlfqs-fair-20
 FAIL tests/threads/mlfqs-nice-2
 FAIL tests/threads/mlfqs-nice-10
