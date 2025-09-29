@@ -130,7 +130,11 @@ sema_up (struct semaphore *sema)
   sema->value++;
   intr_set_level (old_level);
   // PRIORITY SCHEDULER
-  check_preemption();
+  if(thread_mlfqs){
+    mlfqs_check_preemption();
+  } else {
+    check_preemption();
+  }
 }
 
 
