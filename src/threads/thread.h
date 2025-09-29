@@ -100,8 +100,9 @@ struct thread
     int priority;                       /* Priority. */
     // PRIORITY SCHEDULER
     int base_priority;           /* Original priority */
+    int effective_priority;           /* Original priority */
     struct lock *waiting_lock;   /* The lock this thread is currently waiting on */
-    struct list locks;           /* Locks currently held by this thread */
+    struct list locks_held;           /* Locks currently held by this thread */
 
     struct list_elem allelem;           /* List element for all threads list. */
     // MLFQS
@@ -159,6 +160,12 @@ void check_preemption(void);
 bool less_priority(const struct list_elem *a,
                    const struct list_elem *b,
                    void *aux UNUSED);
+bool more_priority(const struct list_elem *a,
+                   const struct list_elem *b,
+                   void *aux UNUSED);
+void donate_priority(struct thread *from, struct thread *to);
+void refresh_priority(struct thread *t);
+void thread_yield_if_necessary(void);
 //MLFQS
 void mlfqs_init(void);
 void mlfqs_insert(struct thread *t);

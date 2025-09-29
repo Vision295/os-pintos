@@ -204,6 +204,8 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
+  t->base_priority = priority;
+  t->effective_priority = priority;
   tid = t->tid = allocate_tid ();
 
   /* Stack frame for kernel_thread(). */
@@ -359,6 +361,69 @@ bool less_priority(const struct list_elem *a, const struct list_elem *b, void *a
   struct thread *threadA = list_entry(a, struct thread, elem);
   struct thread *threadB = list_entry(b, struct thread, elem);
   return threadA->priority > threadB->priority;
+}
+bool more_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  struct thread *threadA = list_entry(a, struct thread, elem);
+  struct thread *threadB = list_entry(b, struct thread, elem);
+  return threadA->priority < threadB->priority;
+}
+/* Donate priority from 'from' thread to 'to' thread.
+   Used when 'from' is waiting for a lock held by 'to'. */
+void
+donate_priority(struct thread *from, struct thread *to)
+{
+  ASSERT(from != NULL);
+  ASSERT(to != NULL);
+  
+  /* Only donate if from has higher priority */
+  if (from->priority > to->priority) {
+    to->priority = from->priority;
+    
+    /* If 'to' is also waiting on a lock, propagate donation */
+    if (to->waiting_lock != NULL && to->waiting_lock->holder != NULL) {
+      donate_priority(to, to->waiting_lock->holder);
+    }
+  }
+}
+
+/* Refresh thread's priority based on locks it holds.
+   Sets priority to the max of base_priority and all waiting threads' priorities. */
+void
+refresh_priority(struct thread *t)
+{
+  ASSERT(t != NULL);
+  
+  /* Start with base priority */
+  t->priority = t->base_priority;
+  
+  /* Check all locks this thread holds */
+  struct list_elem *e;
+  for (e = list_begin(&t->locks_held); e != list_end(&t->locks_held); e = list_next(e)) {
+    struct lock *lock = list_entry(e, struct lock, elem);
+    
+    /* Check all threads waiting on this lock */
+    if (!list_empty(&lock->waiters)) {
+      struct list_elem *w;
+      for (w = list_begin(&lock->waiters); w != list_end(&lock->waiters); w = list_next(w)) {
+        struct thread *waiter = list_entry(w, struct thread, elem);
+        if (waiter->priority > t->priority) {
+          t->priority = waiter->priority;
+        }
+      }
+    }
+  }
+}
+
+/* Yield if current thread is no longer highest priority */
+void
+thread_yield_if_necessary(void)
+{
+  if (!list_empty(&ready_list)) {
+    struct thread *highest = list_entry(list_front(&ready_list), struct thread, elem);
+    if (highest->priority > thread_current()->priority) {
+      thread_yield();
+    }
+  }
 }
 
 
@@ -548,7 +613,7 @@ init_thread (struct thread *t, const char *name, int priority)
   // PRIORITY SCHEDULER
   t->base_priority = t->priority;
   t->waiting_lock = NULL;
-  list_init(&t->locks);
+  list_init(&t->locks_held);
 
   t->magic = THREAD_MAGIC;
   //MLFQS
