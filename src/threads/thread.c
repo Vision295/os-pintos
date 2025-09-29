@@ -77,6 +77,12 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 // MLFQS
+// #define PRINT_FIXED(name, x) \
+//     do { \
+//         int int_part = (x) / F; \
+//         int frac_part = ((x) % F) * 100 / F; \
+//         printf("  " name " = %d.%02d\n", int_part, frac_part); \
+//     } while (0)
 static struct thread *mlfqs_next_thread_to_run (void); 
 int load_avg;
 /* Initializes the threading system by transforming the code
@@ -269,12 +275,12 @@ thread_unblock (struct thread *t)
   if(!thread_mlfqs){
     list_insert_ordered (&ready_list, &t->elem, less_priority, NULL);
   } else {
-    //printf("DEBUG: unblocking and adding to ready list\n");
+
     mlfqs_update_priority(t, NULL);
     mlfqs_insert(t);
   }
   //if(old_level == INTR_ON)
-    //check_preemption(); WHY???
+    //check_preemption();
   //list_push_back (&ready_list, &t->elem);
   intr_set_level (old_level);
 }
@@ -704,16 +710,36 @@ void mlfqs_insert(struct thread *t){
   list_push_back (&mlfqs_list[t_priority], &t->elem);
 }
 
-void mlfqs_update_recent_cpu(struct thread *t, void *aux){
-  if (t == idle_thread)
-    return;
-  int numerator = fp_mul_int(load_avg, 2);
-  int denominator = fp_add_int(numerator, 1);
-  int coef = fp_div(numerator, denominator);
-  int val = fp_mul(coef, t->recent_cpu);
-  val = fp_add_int(val,t->nice);
-  t->recent_cpu = val;
+void mlfqs_update_recent_cpu(struct thread *t, void *aux) {
+    if (t == idle_thread)
+        return;
+
+    int old_cpu = t->recent_cpu;
+
+    // Compute coefficient = 2*load_avg / (2*load_avg + 1)
+    int two_load = fp_mul_int(load_avg, 2);
+    int denom = fp_add_int(two_load, 1);  // note: 1 in integer units
+    int coef = fp_div(two_load, denom);
+
+    // Compute new recent_cpu = coef * old_recent_cpu + nice
+    int new_cpu = fp_mul(coef, old_cpu);
+    new_cpu = fp_add_int(new_cpu, t->nice);
+
+    // Update
+    t->recent_cpu = new_cpu;
+
+    // Debug print
+    // printf("DEBUG: %s recent_cpu update\n", t->name);
+    // PRINT_FIXED("old_recent_cpu", old_cpu);
+    // PRINT_FIXED("load_avg", load_avg);
+    // PRINT_FIXED("numerator 2*load_avg", two_load);
+    // PRINT_FIXED("denominator 2*load_avg+1", denom);
+    // PRINT_FIXED("coef", coef);
+    // PRINT_FIXED("new_recent_cpu", new_cpu);
 }
+
+
+
 
 void mlfqs_update_priority(struct thread *t, void *aux){
   //priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
@@ -735,9 +761,6 @@ void mlfqs_update_load_avg(void){
   int sec_coef = fp_div_int(int_to_fp(1), 60);
   int b = fp_mul_int(sec_coef, ready_threads);
   load_avg = fp_add(a , b);
-  //printf("DEBUG: load_avg calculation: ready=%d, result=%d\n", ready_threads, thread_get_load_avg());
-  //printf("DEBUG: sec_coef=%d (should be ~273), b=%d\n", sec_coef, b);
-  
 }
 /* Updates the recent cpu and load average. Should be called every second*/
 void mlfqs_update_rcpu_la(void){
@@ -758,23 +781,14 @@ void mlfqs_update_priority_all(void){
 /*Returns the number of threads that are currently in the ready state*/
 int mlfqs_ready_threads(void) {
   int counter = 0;
-  //printf("DEBUG: Checking MLFQS queues:\n");
-  
   for (int i = PRI_MIN; i <= PRI_MAX; i++) {
     int count = list_size(&mlfqs_list[i]);
     if (count > 0) {
-      //printf("  Priority %d: %d threads\n", i, count);
     }
     counter += count;
   }
-  
-  //printf("DEBUG: Current thread: %s (priority %d)\n", 
-        // thread_name(), thread_current()->priority);
-  
   if (thread_current() != idle_thread)
     counter++;
-    
-  //printf("DEBUG: Total ready = %d\n", counter);
   return counter;
 }
 

@@ -99,11 +99,11 @@ pass tests/threads/priority-sema
 pass tests/threads/priority-condvar
 FAIL tests/threads/priority-donate-chain
 PASS tests/threads/mlfqs-load-1
-FAIL tests/threads/mlfqs-load-60
-FAIL tests/threads/mlfqs-load-avg
-FAIL tests/threads/mlfqs-recent-1
+PASS tests/threads/mlfqs-load-60
+PASS tests/threads/mlfqs-load-avg
+PASS tests/threads/mlfqs-recent-1
 PASS tests/threads/mlfqs-fair-2
-FAIL tests/threads/mlfqs-fair-20
-FAIL tests/threads/mlfqs-nice-2
-FAIL tests/threads/mlfqs-nice-10
+PASS tests/threads/mlfqs-fair-20
+PASS tests/threads/mlfqs-nice-2
+PASS tests/threads/mlfqs-nice-10
 FAIL tests/threads/mlfqs-block
