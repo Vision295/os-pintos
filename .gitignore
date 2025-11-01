@@ -30,6 +30,8 @@
 
 
 ### PROJECT 2
+!src/userprog
+
 # system call
 !src/userprog/syscall.c
 !src/userprog/syscall.h
