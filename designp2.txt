@@ -1,0 +1,191 @@
+Preliminary steps
+Args passed to process_execute(...) will be tokenized
+Set the stack pointer to PHYS_BASE - 12
+Safe user memory access
+Verify validity before dereferencing
+sys call number : read from user stack and dispatch a handler
+exit() system call for every user program that finishes
+write() to print to fd == 1
+process_wait() to infinite loop
+
+
+I] Print On Exit
+
+add a print on exit of process like this : “%s: exit(%d)\n"
+do not print when halt()
+
+
+II] Argos to proc_exec
+
+Modify process_execute() function
+It will receive a line of text and divide into tokens
+Implement strtok_r() to do that
+First word = program name
+The rest is the arguments
+Limit the input size to data that could fill at most a 4kB file
+The arguments will be passed to the stack
+
+
+III] System Calls
+
+File descriptor :
+For file descriptors (fd) we will use a list of structured elements to match fds with files like this : 
+struct fileFd {
+  int fd;
+  file * file;
+  list_elem* elem;
+};
+struct list_elem file_list;
+get_file (int fd);
+get_fds (struct * file);
+
+For the functions open, remove, write use the filesys_open, filesys_remove, filesys_write functions.
+
+Exit status :
+need not to free memory on termination of a thread to get access to its status information and free it at the end of the execution of the thread that called it.
+
+User invalid pointers
+The pointers the user provides may be invalid, point into kernel memory or a block partially in one of those regions.
+Therefore we should check each pointer before sending it to a system call
+Children Manipulation
+To manipulate children we will implement a list of children that we will pass in reference when creating a process or using the function: exec_process
+
+struct child_process {
+  int pid;
+  int load_status;
+  bool isWaiting;
+  int exit_status;
+  bool hasExited;
+  struct semaphore load_sema;
+  struct semaphore exit_sema;
+  struct list_elem elem;
+};
+Synchronization 
+filesys lock to prevent multiple processes to edit or read at the same time always use this lock before editing a file.
+
+Process Content : 
+Create a one-to-one mapping from tid_t to pid_t using overlays on some functions to allow its process version : 
+process_exit () {
+   thread_exit ();
+}
+void exit (int status) → 
+thread_exit (); 
+free memory of used threads
+return status to kernel; 		// 0 = success, other = error (number)
+
+pid_t exec (const char *cmd_line)
+runs the executable in cmd_line
+creates an empty process 
+return its pid 
+(- 1) = error, other = success
+use synch to avoid : parent returning from the exec without knowing if child executed correctly → lock and CV waiting on success OR use a semaphore to prevent from returning at the end (because it’s statefull)
+
+int wait (pid_t pid)
+Waits for a child process pid and retrieves the child’s exit status
+The exit status is stored in child_process
+If pid was terminated by the kernel, return -1
+The parent process will use sema_up() until the child exits
+If the child terminated before parent called wait - the parent will get that information
+If pid is not a direct child
+return -1
+* Pid is a child  the calling process received pid as a return value from call to exec()
+* Orphaned process will not get reassigned
+If pid was already called by wait()
+return -1
+Processes may
+Spawn any number of children
+Wait for them in any order
+Exit before waiting for some of them
+When the semaphore is released
+All of the child process’s resources must be freed
+Even if parent waits for it, or child exits before/after parent
+Ensure pintos doesn’t terminate until initial process exits
+Scenario 1 - Parent called wait() before child exit()
+Scenario 2 - Child exit() before parent wait()
+Scenario 3 - Child exit() but parent will never wait
+
+bool create (const char *file, unsigned initial_size)
+Create a file called file of size initial_size : doesn’t open
+Running the filesys_create (const char *name)
+Return the value filesys_create() returns
+
+bool remove (const char *file)
+Deletes the file named file using filesys_remove (const char *name)
+If the file name doesn’t exist, return false
+A file can be removed even if it’s open or closed
+Processes that open that file can still read and write
+The fd will not become invalid
+Removing an open file does not close it
+
+int open (const char *file)
+Opens the file named file running
+filesys_open (const char *name)
+Error if no file named file exists (return -1)
+If file could not be opened return -1
+Each call to open() generates a new and unique fd, even in the same process
+0 and 1 are reserved for standard input and output, do not return them
+Each process will have a data structure the keep the different fd’s of open files
+Different fd’s are closed independently and they do not share file position
+
+int filesize (int fd)
+Check that fd represents an open file that belongs to the process
+Return the file size in bytes
+Using file_length (struct file *file)
+
+int read (int fd, void *buffer, unsigned size)
+If fd == 1 return -1
+fd == 0 reads from keyboard using input_getc ()
+else
+Check that fd represents an open file that belongs to the process
+Read size bytes from the file open as fd to buffer
+Using file_read (struct file *file, void *buffer, off_t size)
+Returns number of bytes that were actually read
+Returned by file_read()
+0 at end of file
+Add check
+-1 if could not read for any reason
+
+int write (int fd, const void *buffer, unsigned size)
+If fd == 0 return -1 (error)
+If fd != 1
+Check that fd represents an open file that belongs to the process
+Write size bytes from buffer to the open file fd
+Using file_write (struct file *file, const void *buffer, off_t size)
+Returns the number of bytes actually written
+Returned by file_write()
+May be less than size
+0 if no bytes could be written
+fd == 1 writes to the console
+If size is not bigger than a few hundred bytes, use one call to putbuf (). We can decide the limit
+Otherwise, break the buffer to separate parts and call putbuf () for each one
+
+void seek (int fd, unsigned position)
+Check that fd represents an open file that belongs to the process
+Check that position = min(position, file_length)
+Using file_length (struct file *file)
+Changes the text byte to be read or written in open file fd to position, expressed in bytes from the beginning of the file
+Update file->pos = position
+The following are implemented already in the file system
+A later read obtains 0 bytes indicating EOF
+A later write returns an error
+unsigned tell (int fd)
+Check it is not 0 or 1
+Check that fd represents an open file that belongs to the process
+Returns the position of the next byte to be read or written in the open file fd
+Using off_t file_tell (struct file *file)
+
+void close (int fd)
+Check that fd represents an open file that belongs to the process
+Close file descriptor fd
+Using void file_close (struct file *file)
+Exiting or terminating a process will close all its files by calling this function
+Close open process in sys_exit ()
+Also in process_exit () for processes that were unexpectedly terminated
+
+
+IV] Deny write on .exe
+
+Make sure to deny writes to running program executable
+If the program is running - the executable stays open
+Use file_deny_write () to deny, file_allow_write () to re-enable
+
