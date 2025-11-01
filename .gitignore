@@ -9,6 +9,8 @@
 
 
 !src/
+
+### PROJECT 1
 !src/threads/
 !src/devices/
 
@@ -25,3 +27,13 @@
 !src/devices/timer.c
 !src/devices/timer.h
 
+
+
+### PROJECT 2
+# system call
+!src/userprog/syscall.c
+!src/userprog/syscall.h
+
+# process
+!src/userprog/process.c
+!src/userprog/process.h
