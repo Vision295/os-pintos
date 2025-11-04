@@ -29,6 +29,7 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *prog_name_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -38,8 +39,20 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  prog_name_copy = palloc_get_page (0);
+  if (prog_name_copy == NULL){
+    palloc_free_page(fn_copy);
+    return TID_ERROR;
+  }
+  strlcpy (prog_name_copy, file_name, PGSIZE);
+
+  char *save_ptr;
+  char* prog_name = strtok_r(prog_name_copy, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (prog_name, PRI_DEFAULT, start_process, fn_copy);
+  //tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  palloc_free_page(prog_name_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -54,18 +67,31 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  char *save_ptr;
+  char *argv[128];
+  int argc = 0;
+
+  for (char *token = strtok_r(file_name, " ", &save_ptr);
+    token != NULL && argc < 128;
+    token = strtok_r(NULL, " ", &save_ptr)){
+      argv[argc++] = token;
+    }
+  
+
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (argv[0], &if_.eip, &if_.esp);
+  //success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
-
+  setup_stack(&if_.esp, argv, argc);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
