@@ -1,12 +1,19 @@
+
+filesys/file
+filesys/filesys
+userprog/process
+userprog/syscall
+
+
 Preliminary steps
 Args passed to process_execute(...) will be tokenized
-Set the stack pointer to PHYS_BASE - 12
+Set the stack pointer to PHYS_BASE - 12 - DONE
 Safe user memory access
 Verify validity before dereferencing
 sys call number : read from user stack and dispatch a handler
 exit() system call for every user program that finishes
 write() to print to fd == 1
-process_wait() to infinite loop
+process_wait() to infinite loop - DONE
 
 
 I] Print On Exit

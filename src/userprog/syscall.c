@@ -33,11 +33,83 @@ void exit(int status) {
 }
 
 void write(int fd, const char *buffer, unsigned size) {
+    if (fd == 0){return -1;}
     if (fd == 1) {  // stdout
         putbuf(buffer, size);
     } else {
         // For now, you can ignore file descriptors other than stdout
     }
+}
+
+pid_t exec (const char *cmd_line){
+    pid_t pid = process_execute(cmd_line);
+    if(pid == TID_ERROR){
+        return -1;    
+    }
+    else {
+        return pid;
+    }
+}
+
+int read (int fd, void *buffer, unsigned size){
+    if (fd == 1){return -1;}
+    lock_acquire(&filesys_lock);
+    int bytes_read = 0;
+    else if (fd == 0){
+        for (unsigned i = 0; i < size; i++){
+            ((uint8_t *) buffer)[i] = input_getc();
+            bytes_read++;
+        }
+    } else {
+        // NOT implemented yet
+        struct file *f = thread_current()->fd_table[fd];
+        if(f){
+            bytes_read = file_read(f, buffer, size);
+        }
+    }
+    lock_release(&filesys_lock);
+    return bytes_read;
+}
+
+int filesize(int fd){
+    if (fd == 1 || fd == 0){return -1;}
+    // NOT implemented yet
+    struct file *f = thread_current()->fd_table[fd];
+    if(f){
+        return file_length(f);
+    }
+    return -1;
+}
+
+void seek (int fd, unsigned position){
+    if (fd == 1 || fd == 0){return;}
+    // NOT implemented yet
+    struct file *f = thread_current()->fd_table[fd];
+    if(f == NULL){
+        return;
+    }
+    file_seek(f, position);
+}
+
+unsigned tell (int fd){
+    if (fd == 1 || fd == 0){return -1;}
+    // NOT implemented yet
+    struct file *f = thread_current()->fd_table[fd];
+    if(f == NULL){
+        return -1;
+    }
+    return file_tell(f);
+}
+
+void close (int fd){
+    if (fd == 1 || fd == 0){return;}
+    // NOT implemented yet
+    struct file *f = thread_current()->fd_table[fd];
+    if(f == NULL){
+        return;
+    }
+    file_close(f);
+    thread_current()->fd_table[fd] = NULL;
 }
 
 
@@ -73,6 +145,13 @@ syscall_handler (struct intr_frame *f UNUSED)
           exit(status);
           break;
       }
+      case SYS_EXEC:
+      {
+        const char *cmd_line = *(const char **)(user_esp + 1);
+        check_user_pointer(cmd_line); // Maybe check the string as well
+        f->eax = exec(cmd_line);
+        break;
+      }
       case SYS_WRITE:
       {
           int fd = *(int *)(user_esp + 1);
@@ -88,5 +167,5 @@ syscall_handler (struct intr_frame *f UNUSED)
           exit(-1);
           break;
   }
-  thread_exit ();
+  thread_exit (); // Problem
 }
