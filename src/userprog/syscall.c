@@ -32,14 +32,6 @@ void exit(int status) {
     thread_exit();  // terminates the process
 }
 
-void write(int fd, const char *buffer, unsigned size) {
-    if (fd == 0){return -1;}
-    if (fd == 1) {  // stdout
-        putbuf(buffer, size);
-    } else {
-        // For now, you can ignore file descriptors other than stdout
-    }
-}
 
 pid_t exec (const char *cmd_line){
     pid_t pid = process_execute(cmd_line);
@@ -48,9 +40,53 @@ pid_t exec (const char *cmd_line){
     }
     else {
         return pid;
-    }
+    } //TODO synchronization
 }
 
+int wait(pid_t pid){
+
+}
+
+bool create (const char *file, unsigned initial_size){
+    check_user_pointer(file);
+    return filesys_create (file, initial_size); 
+}
+
+bool remove (const char *file){
+    check_user_pointer(file);
+    return filesys_remove(file);
+}
+
+int open (const char *file){
+    if(file == NULL){
+        return -1;
+    }
+    check_user_pointer(file);
+    struct file *f = filesys_open (file);
+    if(f == NULL){
+        return -1;
+    }
+    // TO IMPLEMENT
+    int fd = thread_current()->get_fd();
+    if(fd == -1){
+        file_close(f);
+        return -1;
+    }
+    thread_current()->fd_table[fd] = f;
+    return fd;
+}
+
+
+
+int filesize(int fd){
+    if (fd == 1 || fd == 0){return -1;}
+    // NOT implemented yet
+    struct file *f = thread_current()->fd_table[fd];
+    if(f){
+        return file_length(f);
+    }
+    return -1;
+}
 int read (int fd, void *buffer, unsigned size){
     if (fd == 1){return -1;}
     lock_acquire(&filesys_lock);
@@ -70,15 +106,13 @@ int read (int fd, void *buffer, unsigned size){
     lock_release(&filesys_lock);
     return bytes_read;
 }
-
-int filesize(int fd){
-    if (fd == 1 || fd == 0){return -1;}
-    // NOT implemented yet
-    struct file *f = thread_current()->fd_table[fd];
-    if(f){
-        return file_length(f);
+void write(int fd, const char *buffer, unsigned size) {
+    if (fd == 0){return -1;}
+    if (fd == 1) {  // stdout
+        putbuf(buffer, size);
+    } else {
+        // For now, you can ignore file descriptors other than stdout
     }
-    return -1;
 }
 
 void seek (int fd, unsigned position){
@@ -159,9 +193,38 @@ syscall_handler (struct intr_frame *f UNUSED)
           unsigned size = *(unsigned *)(user_esp + 3);
 
           check_user_pointer(buffer); // make sure buffer is valid
-          write(fd, buffer, size);
+          f->eax = write(fd, buffer, size);
           break;
       }
+      case SYS_READ:
+      {
+        int fd = *(int *)(user_esp + 1);
+        char *buffer = *(char **)(user_esp + 2);
+        unsigned size = *(unsigned *)(user_esp + 3);
+
+        check_user_pointer(buffer); // make sure buffer is valid
+        f->eax = read(fd, buffer, size);
+        break;
+      }
+      case SYS_SEEK:
+      {
+        int fd = *(int *)(user_esp + 1);
+        unsigned position = *(unsigned *)(user_esp + 2);
+        seek(fd, position);
+        break;
+      }
+      case SYS_TELL:
+      {
+        int fd = *(int *)(user_esp + 1);
+        f->eax = tell(fd);
+        break;
+      }
+      case SYS_CLOSE:
+      {
+        int fd = *(int *)(user_esp + 1);
+        close(fd);
+      }
+        
       default:
           printf("Unknown syscall %d\n", syscall_number);
           exit(-1);
