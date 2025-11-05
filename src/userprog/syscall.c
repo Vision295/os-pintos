@@ -29,6 +29,12 @@ void halt(void) {
 void exit(int status) {
     struct thread *cur = thread_current();
     printf("%s: exit(%d)\n", cur->name, status);  // optional logging
+    // If child exits, update the exit info
+    if(thread_current()->child_info){
+        thread_current()->child_info->exit_status = status;
+        thread_current()->child_info->has_exited = true;
+        sema_up(&thread_current()->child_info->wait_sema);
+    }
     thread_exit();  // terminates the process
 }
 
@@ -44,7 +50,21 @@ pid_t exec (const char *cmd_line){
 }
 
 int wait(pid_t pid){
-
+    // Get to info of the right child
+    struct child_info *info = thread_find_child(pid);
+    // If pid is not a child or has been called already 
+    if (!info || info->has_been_waited_on){
+        return -1;
+    }
+    info->has_been_waited_on = true;
+    // Waiting for child to exit
+    if(!info->has_exited){
+        sema_down(&info->wait_sema);
+    }
+    int status = info->exit_status;
+    list_remove(&info->elem); // Remove the child
+    free(info); // Free the memory that was allocated in process_execute
+    return status;
 }
 
 bool create (const char *file, unsigned initial_size){
@@ -66,8 +86,7 @@ int open (const char *file){
     if(f == NULL){
         return -1;
     }
-    // TO IMPLEMENT
-    int fd = thread_current()->get_fd();
+    int fd = thread_current()->thread_get_fd();
     if(fd == -1){
         file_close(f);
         return -1;
@@ -76,11 +95,8 @@ int open (const char *file){
     return fd;
 }
 
-
-
 int filesize(int fd){
-    if (fd == 1 || fd == 0){return -1;}
-    // NOT implemented yet
+    if (fd < 2 || fd >= MAX_FD){return -1;}
     struct file *f = thread_current()->fd_table[fd];
     if(f){
         return file_length(f);
@@ -88,16 +104,15 @@ int filesize(int fd){
     return -1;
 }
 int read (int fd, void *buffer, unsigned size){
-    if (fd == 1){return -1;}
+    if (fd < 0 || fd == 1 || fd >= MAX_FD){return -1;}
     lock_acquire(&filesys_lock);
     int bytes_read = 0;
-    else if (fd == 0){
+    if (fd == 0){
         for (unsigned i = 0; i < size; i++){
             ((uint8_t *) buffer)[i] = input_getc();
             bytes_read++;
         }
     } else {
-        // NOT implemented yet
         struct file *f = thread_current()->fd_table[fd];
         if(f){
             bytes_read = file_read(f, buffer, size);
@@ -106,18 +121,26 @@ int read (int fd, void *buffer, unsigned size){
     lock_release(&filesys_lock);
     return bytes_read;
 }
-void write(int fd, const char *buffer, unsigned size) {
-    if (fd == 0){return -1;}
+int write(int fd, const char *buffer, unsigned size) {
+    
+    if (fd <= 0 || fd >= MAX_FD){return -1;}
+    lock_acquire(&filesys_lock);
+    int bytes_written = 0;
     if (fd == 1) {  // stdout
         putbuf(buffer, size);
+        bytes_written = size;
     } else {
-        // For now, you can ignore file descriptors other than stdout
+        struct file *f = thread_current()->fd_table[fd];
+        if(f){
+            bytes_written = file_write(f, buffer, size);
+        }
     }
+    lock_release(&filesys_lock);
+    return bytes_written;
 }
 
 void seek (int fd, unsigned position){
-    if (fd == 1 || fd == 0){return;}
-    // NOT implemented yet
+    if (fd < 2 || fd >= MAX_FD){return;}
     struct file *f = thread_current()->fd_table[fd];
     if(f == NULL){
         return;
@@ -126,8 +149,7 @@ void seek (int fd, unsigned position){
 }
 
 unsigned tell (int fd){
-    if (fd == 1 || fd == 0){return -1;}
-    // NOT implemented yet
+    if (fd < 2 || fd >= MAX_FD){return -1;}
     struct file *f = thread_current()->fd_table[fd];
     if(f == NULL){
         return -1;
@@ -136,8 +158,7 @@ unsigned tell (int fd){
 }
 
 void close (int fd){
-    if (fd == 1 || fd == 0){return;}
-    // NOT implemented yet
+    if (fd < 2 || fd >= MAX_FD){return;}
     struct file *f = thread_current()->fd_table[fd];
     if(f == NULL){
         return;
@@ -179,11 +200,53 @@ syscall_handler (struct intr_frame *f UNUSED)
           exit(status);
           break;
       }
+      
       case SYS_EXEC:
       {
         const char *cmd_line = *(const char **)(user_esp + 1);
         check_user_pointer(cmd_line); // Maybe check the string as well
         f->eax = exec(cmd_line);
+        break;
+      }
+      case SYS_WAIT:
+      {
+        pid_t pid = *(pid_t *)(user_esp + 1);
+        f->eax = wait(pid);
+        break;
+      }
+      case SYS_CREATE:
+      {
+        const char *file = *(const char **)(user_esp + 1);
+        unsigned initial_size = *(unsigned *)(user_esp + 2);
+        f->eax = create(file, initial_size);
+        break;
+      }
+      case SYS_REMOVE:
+      {
+        const char *file = *(const char **)(user_esp + 1);
+        f->eax = remove(file);
+        break;
+      }
+      case SYS_OPEN:
+      {
+        const char *file = *(const char **)(user_esp + 1);
+        f->eax = open(file);
+        break;
+      }
+      case SYS_FILESIZE:
+      {
+        int fd = *(int *)(user_esp + 1);
+        f->eax = filesize(fd);
+        break;
+      }
+      case SYS_READ:
+      {
+        int fd = *(int *)(user_esp + 1);
+        char *buffer = *(char **)(user_esp + 2);
+        unsigned size = *(unsigned *)(user_esp + 3);
+
+        check_user_pointer(buffer); // make sure buffer is valid
+        f->eax = read(fd, buffer, size);
         break;
       }
       case SYS_WRITE:
@@ -195,16 +258,6 @@ syscall_handler (struct intr_frame *f UNUSED)
           check_user_pointer(buffer); // make sure buffer is valid
           f->eax = write(fd, buffer, size);
           break;
-      }
-      case SYS_READ:
-      {
-        int fd = *(int *)(user_esp + 1);
-        char *buffer = *(char **)(user_esp + 2);
-        unsigned size = *(unsigned *)(user_esp + 3);
-
-        check_user_pointer(buffer); // make sure buffer is valid
-        f->eax = read(fd, buffer, size);
-        break;
       }
       case SYS_SEEK:
       {
@@ -230,5 +283,4 @@ syscall_handler (struct intr_frame *f UNUSED)
           exit(-1);
           break;
   }
-  thread_exit (); // Problem
 }

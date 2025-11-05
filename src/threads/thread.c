@@ -375,6 +375,34 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
+
+int
+thread_get_fd(void){
+  struct thread *t = thread_current();
+  for(int i = 2; i < MAX_FD; i++){
+    if(t->fd_table[i] == NULL){
+      return i;
+    }
+  }
+  return -1;
+}
+
+struct child_info * 
+thread_find_child(pid_t pid){
+  struct thread *cur = thread_current();
+  struct list_elem *e;
+  for(e = list_begin(&cur->children);
+      e != list_end(&cur->children);
+      e = list_next(e)){
+        struct child_info *info = list_entry(e, struct child_info, elem);
+        if(info->pid == pid){
+          return info;
+        }
+      }
+      return NULL;
+}
+
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -463,6 +491,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  for (int i = 0; i < MAX_FD; i++){
+    t->fd_table[i] = NULL;
+  }
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -578,6 +610,8 @@ allocate_tid (void)
 
   return tid;
 }
+
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */

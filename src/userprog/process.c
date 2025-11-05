@@ -47,6 +47,7 @@ process_execute (const char *file_name)
   strlcpy (prog_name_copy, file_name, PGSIZE);
 
   char *save_ptr;
+  // parsing
   char* prog_name = strtok_r(prog_name_copy, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
@@ -54,7 +55,23 @@ process_execute (const char *file_name)
   //tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   palloc_free_page(prog_name_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+  // Initializing child into
+  struct child_info *info = malloc(sizeof(struct child_info));
+  info->pid = tid;
+  info->exit_status = -1;
+  info->has_exited = false;
+  info->has_been_waited_on = false;
+  info->load_success = false;
+  sema_init(&info->load_sema, 0);
+  sema_init(&info->wait_sema, 0);
+  
+  list_push_back(&thread_current()->children, &info->elem);
+  child_thread->child_info = info;
+  child_thread->parent = thread_current();
+
+
+
   return tid;
 }
 

@@ -23,6 +23,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define MAX_FD 128
 
 /* A kernel thread or user process.
 
@@ -95,6 +96,10 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct file *fd_table[MAX_FD];
+    struct list children;
+    struct child_info *child_info;
+    struct thread *parent;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -104,6 +109,20 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct child_info {
+   pid_t pid;
+   // exec synchronization
+   bool load_success;
+   struct semaphore load_sema;
+   // wait synchronization
+   int exit_status;
+   bool has_exited;
+   bool has_been_waited_on;
+   struct semaphore wait_sema;
+   
+   struct list_elem elem;
+}
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -141,4 +160,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+int thread_get_fd(void);
+struct child_info * thread_find_child(pid_t pid)
 #endif /* threads/thread.h */
