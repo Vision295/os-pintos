@@ -106,14 +106,6 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
 
-      int pid_t;
-      int load_status;
-      bool isWaiting;
-      int exit_status;
-      bool hasExited;
-      struct semaphore load_sema;
-      struct semaphore exit_sema;
-      struct list_elem elem;
 
   };
 

@@ -32,12 +32,13 @@ void exit(int status) {
     thread_exit();  // terminates the process
 }
 
-void write(int fd, const char *buffer, unsigned size) {
+int write(int fd, const char *buffer, unsigned size) {
     if (fd == 1) {  // stdout
         putbuf(buffer, size);
     } else {
         // For now, you can ignore file descriptors other than stdout
     }
+    return 1;
 }
 
 
@@ -60,8 +61,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   // Step 3: dispatch to handler
   switch (syscall_number) {
-      case SYS:
-      {}
       case SYS_HALT:
       {
           halt();
