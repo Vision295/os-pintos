@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool setup_stack (void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -87,6 +88,11 @@ process_execute (const char *file_name)
   list_push_back(&thread_current()->children, &info->elem);
   //child_thread->child_info = info;
   //child_thread->parent = thread_current();
+  //child_thread->child_info = info;
+  //child_thread->parent = thread_current();
+
+
+
   return tid;
 }
 
@@ -135,6 +141,7 @@ start_process (void *data_)
   if (!success) 
     thread_exit ();
   //setup_stack(&if_.esp, argv, argc);
+  setup_stack(&if_.esp);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -282,7 +289,6 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
