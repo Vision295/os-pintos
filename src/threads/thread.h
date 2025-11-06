@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <stdbool.h>
+
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -103,6 +105,16 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+      int pid;
+      int load_status;
+      bool isWaiting;
+      int exit_status;
+      bool hasExited;
+      struct semaphore load_sema;
+      struct semaphore exit_sema;
+      struct list_elem elem;
+
   };
 
 /* If false (default), use round-robin scheduler.
