@@ -7,12 +7,20 @@
 
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+
+
+struct Lock filesys_lock;
 
 // functions to be run each time we use systemcall to verify the validity of user pointers
-void check_user_pointer(const void *uaddr) {
-    if (uaddr == NULL || !is_user_vaddr(uaddr)) {
+int check_user_pointer(const void *uaddr) {
+    if (!is_user_vaddr(uaddr)) {
         exit(-1);  // terminate process if pointer is invalid
+        return -1;
+    } else if (uaddr == NULL) {
+        return -1;
     }
+    return;
 }
 void write_user_buffer(const char *buffer, size_t size) {
     for (size_t i = 0; i < size; i++) {
@@ -40,13 +48,16 @@ void exit(int status) {
 
 
 pid_t exec (const char *cmd_line){
+    sema_up(&thread_current()->child_info->load_sema);
+    sema_up(&thread_current()->child_info->wait_sema);
     pid_t pid = process_execute(cmd_line);
     if(pid == TID_ERROR){
         return -1;    
     }
     else {
         return pid;
-    } //TODO synchronization
+    } 
+    sema_down(&thread_current()->child_info->load_sema);
 }
 
 int wait(pid_t pid){
@@ -58,7 +69,7 @@ int wait(pid_t pid){
     }
     info->has_been_waited_on = true;
     // Waiting for child to exit
-    if(!info->has_exited){
+    while(!info->has_exited){
         sema_down(&info->wait_sema);
     }
     int status = info->exit_status;
@@ -78,15 +89,12 @@ bool remove (const char *file){
 }
 
 int open (const char *file){
-    if(file == NULL){
+    if (check_user_pointer(file))
         return -1;
-    }
-    check_user_pointer(file);
     struct file *f = filesys_open (file);
-    if(f == NULL){
+    if (check_user_pointer(f))
         return -1;
-    }
-    int fd = thread_current()->thread_get_fd();
+    int fd = thread_get_fd();
     if(fd == -1){
         file_close(f);
         return -1;
@@ -151,24 +159,20 @@ void seek (int fd, unsigned position){
 unsigned tell (int fd){
     if (fd < 2 || fd >= MAX_FD){return -1;}
     struct file *f = thread_current()->fd_table[fd];
-    if(f == NULL){
+    if (check_user_pointer(f))
         return -1;
-    }
     return file_tell(f);
 }
 
 void close (int fd){
     if (fd < 2 || fd >= MAX_FD){return;}
     struct file *f = thread_current()->fd_table[fd];
-    if(f == NULL){
+    if (check_user_pointer(f))
         return;
-    }
     file_close(f);
     thread_current()->fd_table[fd] = NULL;
 }
 
-
-static void syscall_handler (struct intr_frame *);
 
 void
 syscall_init (void) 
