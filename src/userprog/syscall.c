@@ -36,46 +36,54 @@ void halt(void) {
 
 void exit(int status) {
     struct thread *cur = thread_current();
+    //cur->child_info->exit_status = status;
+    // Synchronization
+    if(cur->child_info){
+            cur->child_info->exit_status = status;
+            cur->child_info->has_exited = true;
+            sema_up(&cur->child_info->wait_sema);
+        }
     printf("%s: exit(%d)\n", cur->name, status);  // optional logging
     // If child exits, update the exit info
-    if(thread_current()->child_info){
-        thread_current()->child_info->exit_status = status;
-        thread_current()->child_info->has_exited = true;
-        sema_up(&thread_current()->child_info->wait_sema);
-    }
+    
     thread_exit();  // terminates the process
 }
 
 
 pid_t exec (const char *cmd_line){
-    sema_up(&thread_current()->child_info->load_sema);
-    sema_up(&thread_current()->child_info->wait_sema);
+    //sema_up(&thread_current()->child_info->load_sema);
+    //sema_up(&thread_current()->child_info->wait_sema);
     pid_t pid = process_execute(cmd_line);
     if(pid == TID_ERROR){
         return -1;    
     }
-    else {
-        return pid;
-    } 
-    sema_down(&thread_current()->child_info->load_sema);
+    
+    struct child_info *info = thread_find_child(pid);
+    if(!info) return -1;
+    sema_down(&info->load_sema);
+    if(!info->load_success){
+        return -1;
+    }
+    return pid;
 }
 
 int wait(pid_t pid){
-    // Get to info of the right child
-    struct child_info *info = thread_find_child(pid);
-    // If pid is not a child or has been called already 
-    if (!info || info->has_been_waited_on){
-        return -1;
-    }
-    info->has_been_waited_on = true;
-    // Waiting for child to exit
-    while(!info->has_exited){
-        sema_down(&info->wait_sema);
-    }
-    int status = info->exit_status;
-    list_remove(&info->elem); // Remove the child
-    free(info); // Free the memory that was allocated in process_execute
-    return status;
+    return process_wait(pid);
+//     // Get to info of the right child
+//     struct child_info *info = thread_find_child(pid);
+//     // If pid is not a child or has been called already 
+//     if (!info || info->has_been_waited_on){
+//         return -1;
+//     }
+//     info->has_been_waited_on = true;
+//     // Waiting for child to exit
+//     if(!info->has_exited){
+//         sema_down(&info->wait_sema);
+//     }
+//     int status = info->exit_status;
+//     list_remove(&info->elem); // Remove the child
+//     free(info); // Free the memory that was allocated in process_execute
+//     return status;
 }
 
 bool create (const char *file, unsigned initial_size){
@@ -191,8 +199,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   // Step 3: dispatch to handler
   switch (syscall_number) {
-      case SYS:
-      {}
       case SYS_HALT:
       {
           halt();

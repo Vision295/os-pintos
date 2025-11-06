@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -124,7 +125,7 @@ struct child_info {
    struct semaphore wait_sema;
    
    struct list_elem elem;
-}
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -163,5 +164,5 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 int thread_get_fd(void);
-struct child_info * thread_find_child(pid_t pid)
+struct child_info * thread_find_child(pid_t pid);
 #endif /* threads/thread.h */

@@ -29,7 +29,7 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  char *prog_name_copy;
+  //char *prog_name_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -39,26 +39,25 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  prog_name_copy = palloc_get_page (0);
-  if (prog_name_copy == NULL){
-    palloc_free_page(fn_copy);
-    return TID_ERROR;
-  }
-  strlcpy (prog_name_copy, file_name, PGSIZE);
 
-  char *save_ptr;
+  char *name, *args;
+  name = strtok_r(fn_copy, " ", &args);
+  // prog_name_copy = palloc_get_page (0);
+  // if (prog_name_copy == NULL){
+  //   palloc_free_page(fn_copy);
+  //   return TID_ERROR;
+  // }
+  // strlcpy (prog_name_copy, file_name, PGSIZE);
+
+  //char *save_ptr;
   // parsing
-  char* prog_name = strtok_r(prog_name_copy, " ", &save_ptr);
+  //char* prog_name = strtok_r(prog_name_copy, " ", &save_ptr);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (prog_name, PRI_DEFAULT, start_process, fn_copy);
-  //tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  palloc_free_page(prog_name_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
-  // Initializing child into
+
+  // Synchronization part 1
+  // Initializing child info
   struct child_info *info = malloc(sizeof(struct child_info));
-  info->pid = tid;
+  
   info->exit_status = -1;
   info->has_exited = false;
   info->has_been_waited_on = false;
@@ -66,49 +65,76 @@ process_execute (const char *file_name)
   sema_init(&info->load_sema, 0);
   sema_init(&info->wait_sema, 0);
   
+  
+  struct exec_data *data = malloc(sizeof(struct exec_data));
+  data->name = name;
+  data->args = args;
+  data->child_info = info;
+
+  /* Create a new thread to execute FILE_NAME. */
+  //tid = thread_create (prog_name, PRI_DEFAULT, start_process, fn_copy);
+  //tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (name, PRI_DEFAULT, start_process, data);
+  //palloc_free_page(prog_name_copy);
+  if (tid == TID_ERROR){
+    free(info);
+    free(data);
+    palloc_free_page (fn_copy);
+    return TID_ERROR;
+  }
+  // Synchronization
+  info->pid = tid;
   list_push_back(&thread_current()->children, &info->elem);
-  child_thread->child_info = info;
-  child_thread->parent = thread_current();
-
-
-
+  //child_thread->child_info = info;
+  //child_thread->parent = thread_current();
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *data_)
 {
-  char *file_name = file_name_;
+  struct exec_data *data = (struct exec_data*)data_;
+  char *file_name = data->name;
+  char *cmd_line = data->args;
+  struct child_info *info = data->child_info;
+  // char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
 
-  char *save_ptr;
-  char *argv[128];
-  int argc = 0;
+  // char *save_ptr;
+  // char *argv[128];
+  // int argc = 0;
 
-  for (char *token = strtok_r(file_name, " ", &save_ptr);
-    token != NULL && argc < 128;
-    token = strtok_r(NULL, " ", &save_ptr)){
-      argv[argc++] = token;
-    }
+  // for (char *token = strtok_r(file_name, " ", &save_ptr);
+  //   token != NULL && argc < 128;
+  //   token = strtok_r(NULL, " ", &save_ptr)){
+  //     argv[argc++] = token;
+  //   }
   
-
+  thread_current()->child_info = info;
   
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (argv[0], &if_.eip, &if_.esp);
-  //success = load (file_name, &if_.eip, &if_.esp);
+  //success = load (argv[0], &if_.eip, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp);
 
+  if(success){
+    success = push_args();
+  }
+
+  info->load_success = success;
+  sema_up(&info->load_sema);
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (data->name);
+  free(data);
   if (!success) 
     thread_exit ();
-  setup_stack(&if_.esp, argv, argc);
+  //setup_stack(&if_.esp, argv, argc);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -131,12 +157,21 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while (1) 
-  {
-    // wait forever
-    thread_yield(); // optional: let other threads run
+  // Get to info of the right child
+  struct child_info *info = thread_find_child(child_tid);
+  // If pid is not a child or has been called already 
+  if (!info || info->has_been_waited_on){
+      return -1;
   }
-  return 0; // never reached
+  info->has_been_waited_on = true;
+  // Waiting for child to exit
+  if(!info->has_exited){
+      sema_down(&info->wait_sema);
+  }
+  int status = info->exit_status;
+  list_remove(&info->elem); // Remove the child
+  free(info); // Free the memory that was allocated in process_execute
+  return status;
 }
 
 /* Free the current process's resources. */
@@ -145,6 +180,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+
+  
+
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -352,7 +391,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-
+  
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
