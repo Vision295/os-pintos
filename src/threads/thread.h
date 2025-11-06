@@ -106,7 +106,7 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
 
-      int pid;
+      int pid_t;
       int load_status;
       bool isWaiting;
       int exit_status;
