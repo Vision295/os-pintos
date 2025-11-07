@@ -6,23 +6,30 @@
 
 
 #include "userprog/pagedir.h"
+
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "devices/shutdown.h"
+#include "devices/input.h"
+#include "userprog/process.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
+static void syscall_handler (struct intr_frame *); 
 
-struct Lock filesys_lock;
+struct lock filesys_lock;
 
 // functions to be run each time we use systemcall to verify the validity of user pointers
-int check_user_pointer(const void *uaddr) {
+static int check_user_pointer(const void *uaddr) {
     if (!is_user_vaddr(uaddr)) {
         exit(-1);  // terminate process if pointer is invalid
         return -1;
     } else if (uaddr == NULL) {
         return -1;
     }
-    return;
+    return 0;
 }
-void write_user_buffer(const char *buffer, size_t size) {
+static void write_user_buffer(const char *buffer, size_t size) {
     for (size_t i = 0; i < size; i++) {
         check_user_pointer(buffer + i);  // check each byte
         char c = buffer[i];              // safe to read
@@ -36,7 +43,6 @@ void halt(void) {
 
 void exit(int status) {
     struct thread *cur = thread_current();
-    //cur->child_info->exit_status = status;
     // Synchronization
     if(cur->child_info){
             cur->child_info->exit_status = status;
@@ -44,20 +50,16 @@ void exit(int status) {
             sema_up(&cur->child_info->wait_sema);
         }
     printf("%s: exit(%d)\n", cur->name, status);  // optional logging
-    // If child exits, update the exit info
-    
+    // If child exits, update the exit info 
     thread_exit();  // terminates the process
 }
 
 
 pid_t exec (const char *cmd_line){
-    //sema_up(&thread_current()->child_info->load_sema);
-    //sema_up(&thread_current()->child_info->wait_sema);
     pid_t pid = process_execute(cmd_line);
     if(pid == TID_ERROR){
         return -1;    
     }
-    
     struct child_info *info = thread_find_child(pid);
     if(!info) return -1;
     sema_down(&info->load_sema);
@@ -69,21 +71,6 @@ pid_t exec (const char *cmd_line){
 
 int wait(pid_t pid){
     return process_wait(pid);
-//     // Get to info of the right child
-//     struct child_info *info = thread_find_child(pid);
-//     // If pid is not a child or has been called already 
-//     if (!info || info->has_been_waited_on){
-//         return -1;
-//     }
-//     info->has_been_waited_on = true;
-//     // Waiting for child to exit
-//     if(!info->has_exited){
-//         sema_down(&info->wait_sema);
-//     }
-//     int status = info->exit_status;
-//     list_remove(&info->elem); // Remove the child
-//     free(info); // Free the memory that was allocated in process_execute
-//     return status;
 }
 
 bool create (const char *file, unsigned initial_size){
@@ -137,7 +124,7 @@ int read (int fd, void *buffer, unsigned size){
     lock_release(&filesys_lock);
     return bytes_read;
 }
-int write(int fd, const char *buffer, unsigned size) {
+int write(int fd, const void *buffer, unsigned size) {
     
     if (fd <= 0 || fd >= MAX_FD){return -1;}
     lock_acquire(&filesys_lock);
@@ -182,14 +169,17 @@ void close (int fd){
 }
 
 
+
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&filesys_lock);
 }
 
+
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
   // esp points to the user stack at the time of the syscall
   uint32_t *user_esp = f->esp;
@@ -286,6 +276,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       {
         int fd = *(int *)(user_esp + 1);
         close(fd);
+        break;
       }
         
       default:
@@ -294,3 +285,4 @@ syscall_handler (struct intr_frame *f UNUSED)
           break;
   }
 }
+

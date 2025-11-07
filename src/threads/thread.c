@@ -399,7 +399,7 @@ thread_find_child(pid_t pid){
           return info;
         }
       }
-      return NULL;
+  return NULL;
 }
 
 
@@ -491,6 +491,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  // Synchronization
+  list_init(&t->children);
+  t->child_info = NULL;
+  t->parent = NULL;
 
   for (int i = 0; i < MAX_FD; i++){
     t->fd_table[i] = NULL;

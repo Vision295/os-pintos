@@ -2,6 +2,7 @@
 #define USERPROG_PROCESS_H
 
 #include "threads/thread.h"
+//typedef int pid_t;
 struct exec_data {
     char *name;
     char *args;

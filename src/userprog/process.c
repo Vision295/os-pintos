@@ -21,6 +21,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static bool setup_stack (void **esp);
+static bool setup_stack_args(void **esp, char *file_name, char *cmd_line);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -30,7 +31,6 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  //char *prog_name_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -40,25 +40,31 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-
-  char *name, *args;
-  name = strtok_r(fn_copy, " ", &args);
-  // prog_name_copy = palloc_get_page (0);
-  // if (prog_name_copy == NULL){
-  //   palloc_free_page(fn_copy);
-  //   return TID_ERROR;
-  // }
-  // strlcpy (prog_name_copy, file_name, PGSIZE);
-
-  //char *save_ptr;
-  // parsing
-  //char* prog_name = strtok_r(prog_name_copy, " ", &save_ptr);
-
+  char *save_ptr;
+  char *token = strtok_r(fn_copy, " ", &save_ptr);
+  if(token == NULL){
+    palloc_free_page(fn_copy);
+    return TID_ERROR;
+  }
+  char *name = palloc_get_page(0);
+  char *args = palloc_get_page(0);
+  if (name == NULL || args == NULL){
+    palloc_free_page(fn_copy);
+    if(name) palloc_free_page(name);
+    if(args) palloc_free_page(args);
+    return TID_ERROR;
+  }
+  strlcpy(name, token, PGSIZE);
+  if (save_ptr != NULL && *save_ptr != '\0'){
+    strlcpy(args, save_ptr, PGSIZE);
+  } else {
+    args[0] = '\0';
+  }
+  palloc_free_page(fn_copy);
 
   // Synchronization part 1
   // Initializing child info
-  struct child_info *info = malloc(sizeof(struct child_info));
-  
+  struct child_info *info = palloc_get_page(PAL_ZERO);
   info->exit_status = -1;
   info->has_exited = false;
   info->has_been_waited_on = false;
@@ -66,33 +72,23 @@ process_execute (const char *file_name)
   sema_init(&info->load_sema, 0);
   sema_init(&info->wait_sema, 0);
   
-  
-  struct exec_data *data = malloc(sizeof(struct exec_data));
+  struct exec_data *data = palloc_get_page(PAL_ZERO);
   data->name = name;
   data->args = args;
   data->child_info = info;
 
   /* Create a new thread to execute FILE_NAME. */
-  //tid = thread_create (prog_name, PRI_DEFAULT, start_process, fn_copy);
-  //tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   tid = thread_create (name, PRI_DEFAULT, start_process, data);
-  //palloc_free_page(prog_name_copy);
   if (tid == TID_ERROR){
-    free(info);
-    free(data);
-    palloc_free_page (fn_copy);
+    palloc_free_page(name);
+    palloc_free_page(args);
+    palloc_free_page(info);
+    palloc_free_page(data);
     return TID_ERROR;
   }
   // Synchronization
   info->pid = tid;
   list_push_back(&thread_current()->children, &info->elem);
-  //child_thread->child_info = info;
-  //child_thread->parent = thread_current();
-  //child_thread->child_info = info;
-  //child_thread->parent = thread_current();
-
-
-
   return tid;
 }
 
@@ -105,20 +101,8 @@ start_process (void *data_)
   char *file_name = data->name;
   char *cmd_line = data->args;
   struct child_info *info = data->child_info;
-  // char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
-  // char *save_ptr;
-  // char *argv[128];
-  // int argc = 0;
-
-  // for (char *token = strtok_r(file_name, " ", &save_ptr);
-  //   token != NULL && argc < 128;
-  //   token = strtok_r(NULL, " ", &save_ptr)){
-  //     argv[argc++] = token;
-  //   }
-  
   thread_current()->child_info = info;
   
   /* Initialize interrupt frame and load executable. */
@@ -126,31 +110,87 @@ start_process (void *data_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  //success = load (argv[0], &if_.eip, &if_.esp);
   success = load (file_name, &if_.eip, &if_.esp);
-
   if(success){
-    success = push_args();
+    success = setup_stack_args(&if_.esp, file_name, cmd_line);
   }
-
   info->load_success = success;
   sema_up(&info->load_sema);
   /* If load failed, quit. */
   palloc_free_page (data->name);
-  free(data);
+  palloc_free_page(data->args);
+  palloc_free_page(data);
   if (!success) 
     thread_exit ();
-  //setup_stack(&if_.esp, argv, argc);
-  setup_stack(&if_.esp);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
+
+static bool
+setup_stack_args(void **esp, char *file_name, char *cmd_line){
+  char *token, *save_ptr;
+  char *argv[128];
+  int argc = 0;
+
+  // Push program name
+  int len = strlen(file_name) + 1;
+  *esp -= len;
+  memcpy(*esp, file_name, len);
+  argv[argc] = *esp;
+  argc++;
+  // Push the arguments
+  if(cmd_line != NULL && strlen(cmd_line) > 0){
+    for (token = strtok_r(cmd_line, " ", &save_ptr); token != NULL;
+        token = strtok_r(NULL, " ", &save_ptr)){
+          
+      len = strlen(token) + 1;
+      *esp -= len;
+      memcpy(*esp, token, len);
+      argv[argc] = *esp;
+      argc++;
+      if(argc >= 128){
+        return false;
+      }
+    }
+  }
+  // Word align to multiples of 4
+  while ((uintptr_t)*esp % 4 != 0){
+    *esp -= 1;
+    *(uint8_t *)(*esp) = 0;
+  }
+  // Push null pointer sentinel
+  *esp -= sizeof(char *);
+  *(char **)(*esp) = NULL;
+
+  // Push pointers to arguments in reverse order
+  for(int i = argc - 1; i >= 0; i--){
+    *esp -= sizeof(char *);
+    *(char **)(*esp) = argv[i];
+  }
+  // Push argv
+  char **argv_ptr = *esp;
+  *esp -= sizeof(char **);
+  *(char ***)(*esp) = argv_ptr;
+
+  // Push argc
+  *esp -= sizeof(int);
+  *(int *)(*esp) = argc;
+
+  // Push fake return address
+  *esp -= sizeof(void *);
+  *(void **)(*esp) = NULL;   
+  return true;
+}
+
+
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
@@ -177,7 +217,7 @@ process_wait (tid_t child_tid UNUSED)
   }
   int status = info->exit_status;
   list_remove(&info->elem); // Remove the child
-  free(info); // Free the memory that was allocated in process_execute
+  palloc_free_page(info); // Free the memory that was allocated in process_execute
   return status;
 }
 
@@ -187,10 +227,6 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
-
-  
-
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
