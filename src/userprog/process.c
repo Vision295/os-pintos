@@ -85,6 +85,11 @@ start_process (void *file_name_)
   // --- NEW CODE for Argument Parsing ---
   char * file_name_copy;
   file_name_copy = palloc_get_page(0);
+  // Ensure we check for allocation failure (good practice)
+  if (file_name_copy == NULL) {
+      palloc_free_page (file_name);
+      thread_exit ();
+  }
   strlcpy(file_name_copy, file_name, PGSIZE);
 
   char *argv[MAX_CMD_ARGS];
@@ -94,6 +99,7 @@ start_process (void *file_name_)
 
   if (argc == 0) {
       palloc_free_page (file_name_copy);
+      palloc_free_page (file_name); // Free the original if you alloced it
       thread_exit ();
   }
   
@@ -111,9 +117,11 @@ start_process (void *file_name_)
   // --- END MODIFIED LINE ---
 
   /* If load failed, quit. */
+  palloc_free_page (file_name_copy);
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
+  
 
 /* --- [START] STACK SETUP FOR ARGUMENT PASSING --- */
   
@@ -132,6 +140,9 @@ start_process (void *file_name_)
   int i;
   size_t total_len = 0;
 
+  uint8_t *kpage = pagedir_get_page(thread_current()->pagedir, PHYS_BASE - PGSIZE);
+  uint8_t *ksp = kpage + PGSIZE;
+  if_.esp = PHYS_BASE;
   /* 1. Push Argument Strings (in reverse order for convenience) */
   /* We iterate from argc-1 down to 0 */
   for (i = argc - 1; i >= 0; i--) 
@@ -140,9 +151,10 @@ start_process (void *file_name_)
       
       /* Decrement stack pointer */
       if_.esp -= len;
+      ksp -= len;
       
       /* Copy the string to the user stack */
-      memcpy(if_.esp, argv[i], len);
+      memcpy(ksp, argv[i], len);
       
       /* Store the user-space address of this string */
       user_argv_ptrs[i] = if_.esp;
@@ -571,7 +583,7 @@ setup_stack (void **esp)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         // changes to avoid constant page fault
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
