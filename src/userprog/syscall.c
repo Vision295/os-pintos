@@ -28,6 +28,27 @@ check_user_pointer (const void *uaddr) {
     exit (-1);
 }
 
+static void
+check_user_pointer_range(const void *uaddr, size_t size) {
+    struct thread *t = thread_current();
+    const uint8_t *ptr = uaddr;
+
+    for (size_t i = 0; i < size; i++) {
+        if (ptr + i == NULL || !is_user_vaddr(ptr + i) ||
+            pagedir_get_page(t->pagedir, ptr + i) == NULL) {
+            exit(-1); // terminate process safely
+        }
+    }
+}
+static void check_user_string(const char *str) {
+    while (true) {
+        check_user_pointer(str); // check this byte
+        if (*str == '\0') break; // reached end of string
+        str++;
+    }
+}
+
+
 /* Shut down the machine. */
 void
 halt (void) {
@@ -129,7 +150,7 @@ filesize (int fd) {
 
 int
 read (int fd, void *buffer, unsigned size) {
-  check_user_pointer (buffer);
+  check_user_pointer_range(buffer, size);                 // read/write buffers
 
   int bytes_read = 0;
   lock_acquire (&filesys_lock);
@@ -150,7 +171,7 @@ read (int fd, void *buffer, unsigned size) {
 
 int
 write (int fd, const void *buffer, unsigned size) {
-  check_user_pointer (buffer);
+  check_user_pointer_range(buffer, size);                 // read/write buffers
 
   int bytes_written = 0;
   lock_acquire (&filesys_lock);
@@ -215,6 +236,9 @@ static void
 syscall_handler (struct intr_frame *f) {
   uint32_t *user_esp = f->esp;
   check_user_pointer (user_esp);
+  check_user_pointer_range(user_esp, sizeof(int));         // syscall number
+  check_user_pointer_range(f->esp + 4, sizeof(char*)); // exec pointer
+
 
   int syscall_number = *user_esp;
 
@@ -233,7 +257,7 @@ syscall_handler (struct intr_frame *f) {
     case SYS_EXEC: {
       check_user_pointer (user_esp + 1);
       const char *cmd_line = *(const char **)(user_esp + 1);
-      check_user_pointer (cmd_line);
+      check_user_string (cmd_line);
       f->eax = exec (cmd_line);
       break;
     }
