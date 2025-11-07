@@ -3,10 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
-
 #include "userprog/pagedir.h"
-
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "devices/shutdown.h"
@@ -15,274 +12,318 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
-static void syscall_handler (struct intr_frame *); 
+static void syscall_handler (struct intr_frame *);
+static void check_user_pointer (const void *uaddr);
 
 struct lock filesys_lock;
 
-// functions to be run each time we use systemcall to verify the validity of user pointers
-static int check_user_pointer(const void *uaddr) {
-    if (!is_user_vaddr(uaddr)) {
-        exit(-1);  // terminate process if pointer is invalid
-        return -1;
-    } else if (uaddr == NULL) {
-        return -1;
-    }
-    return 0;
-}
-static void write_user_buffer(const char *buffer, size_t size) {
-    for (size_t i = 0; i < size; i++) {
-        check_user_pointer(buffer + i);  // check each byte
-        char c = buffer[i];              // safe to read
-        putbuf(&c, 1);                   // example: write to console
-    }
+/* Validate that a user pointer is in user space and mapped.
+   If not, terminate the process. */
+static void
+check_user_pointer (const void *uaddr) {
+  struct thread *t = thread_current ();
+  if (uaddr == NULL ||
+      !is_user_vaddr (uaddr) ||
+      pagedir_get_page (t->pagedir, uaddr) == NULL)
+    exit (-1);
 }
 
-void halt(void) {
-    shutdown_power_off();  // Pintos function to stop the machine
+/* Shut down the machine. */
+void
+halt (void) {
+  shutdown_power_off ();
 }
 
-void exit(int status) {
-    struct thread *cur = thread_current();
-    // Synchronization
-    if(cur->child_info){
-            cur->child_info->exit_status = status;
-            cur->child_info->has_exited = true;
-            sema_up(&cur->child_info->wait_sema);
-        }
-    printf("%s: exit(%d)\n", cur->name, status);  // optional logging
-    // If child exits, update the exit info 
-    thread_exit();  // terminates the process
+/* Terminate the current user program with status. */
+void
+exit (int status) {
+  struct thread *cur = thread_current ();
+
+  if (cur->child_info) {
+    cur->child_info->exit_status = status;
+    cur->child_info->has_exited = true;
+    sema_up (&cur->child_info->wait_sema);
+  }
+
+  printf ("%s: exit(%d)\n", cur->name, status);
+  thread_exit ();
 }
 
+/* Start another process. */
+pid_t
+exec (const char *cmd_line) {
+  check_user_pointer (cmd_line);
 
-pid_t exec (const char *cmd_line){
-    pid_t pid = process_execute(cmd_line);
-    if(pid == TID_ERROR){
-        return -1;    
-    }
-    struct child_info *info = thread_find_child(pid);
-    if(!info) return -1;
-    sema_down(&info->load_sema);
-    if(!info->load_success){
-        return -1;
-    }
-    return pid;
-}
-
-int wait(pid_t pid){
-    return process_wait(pid);
-}
-
-bool create (const char *file, unsigned initial_size){
-    check_user_pointer(file);
-    return filesys_create (file, initial_size); 
-}
-
-bool remove (const char *file){
-    check_user_pointer(file);
-    return filesys_remove(file);
-}
-
-int open (const char *file){
-    if (check_user_pointer(file))
-        return -1;
-    struct file *f = filesys_open (file);
-    if (check_user_pointer(f))
-        return -1;
-    int fd = thread_get_fd();
-    if(fd == -1){
-        file_close(f);
-        return -1;
-    }
-    thread_current()->fd_table[fd] = f;
-    return fd;
-}
-
-int filesize(int fd){
-    if (fd < 2 || fd >= MAX_FD){return -1;}
-    struct file *f = thread_current()->fd_table[fd];
-    if(f){
-        return file_length(f);
-    }
+  pid_t pid = process_execute (cmd_line);
+  if (pid == TID_ERROR)
     return -1;
-}
-int read (int fd, void *buffer, unsigned size){
-    if (fd < 0 || fd == 1 || fd >= MAX_FD){return -1;}
-    lock_acquire(&filesys_lock);
-    int bytes_read = 0;
-    if (fd == 0){
-        for (unsigned i = 0; i < size; i++){
-            ((uint8_t *) buffer)[i] = input_getc();
-            bytes_read++;
-        }
-    } else {
-        struct file *f = thread_current()->fd_table[fd];
-        if(f){
-            bytes_read = file_read(f, buffer, size);
-        }
-    }
-    lock_release(&filesys_lock);
-    return bytes_read;
-}
-int write(int fd, const void *buffer, unsigned size) {
-    
-    if (fd <= 0 || fd >= MAX_FD){return -1;}
-    lock_acquire(&filesys_lock);
-    int bytes_written = 0;
-    if (fd == 1) {  // stdout
-        putbuf(buffer, size);
-        bytes_written = size;
-    } else {
-        struct file *f = thread_current()->fd_table[fd];
-        if(f){
-            bytes_written = file_write(f, buffer, size);
-        }
-    }
-    lock_release(&filesys_lock);
-    return bytes_written;
+
+  struct child_info *info = thread_find_child (pid);
+  if (!info)
+    return -1;
+
+  sema_down (&info->load_sema);
+  if (!info->load_success)
+    return -1;
+
+  return pid;
 }
 
-void seek (int fd, unsigned position){
-    if (fd < 2 || fd >= MAX_FD){return;}
-    struct file *f = thread_current()->fd_table[fd];
-    if(f == NULL){
-        return;
-    }
-    file_seek(f, position);
+/* Wait for child to finish. */
+int
+wait (pid_t pid) {
+  return process_wait (pid);
 }
 
-unsigned tell (int fd){
-    if (fd < 2 || fd >= MAX_FD){return -1;}
-    struct file *f = thread_current()->fd_table[fd];
-    if (check_user_pointer(f))
-        return -1;
-    return file_tell(f);
+/* File operations */
+bool
+create (const char *file, unsigned initial_size) {
+  check_user_pointer (file);
+  lock_acquire (&filesys_lock);
+  bool success = filesys_create (file, initial_size);
+  lock_release (&filesys_lock);
+  return success;
 }
 
-void close (int fd){
-    if (fd < 2 || fd >= MAX_FD){return;}
-    struct file *f = thread_current()->fd_table[fd];
-    if (check_user_pointer(f))
-        return;
-    file_close(f);
-    thread_current()->fd_table[fd] = NULL;
+bool
+remove (const char *file) {
+  check_user_pointer (file);
+  lock_acquire (&filesys_lock);
+  bool success = filesys_remove (file);
+  lock_release (&filesys_lock);
+  return success;
 }
 
+int
+open (const char *file) {
+  check_user_pointer (file);
 
+  lock_acquire (&filesys_lock);
+  struct file *f = filesys_open (file);
+  lock_release (&filesys_lock);
+
+  if (f == NULL)
+    return -1;
+
+  int fd = thread_get_fd ();
+  if (fd == -1) {
+    file_close (f);
+    return -1;
+  }
+
+  thread_current ()->fd_table[fd] = f;
+  return fd;
+}
+
+int
+filesize (int fd) {
+  if (fd < 2 || fd >= MAX_FD)
+    return -1;
+
+  struct file *f = thread_current ()->fd_table[fd];
+  if (f == NULL)
+    return -1;
+
+  return file_length (f);
+}
+
+int
+read (int fd, void *buffer, unsigned size) {
+  check_user_pointer (buffer);
+
+  int bytes_read = 0;
+  lock_acquire (&filesys_lock);
+
+  if (fd == 0) {  /* stdin */
+    for (unsigned i = 0; i < size; i++)
+      ((uint8_t *) buffer)[i] = input_getc ();
+    bytes_read = size;
+  } else if (fd > 1 && fd < MAX_FD) {
+    struct file *f = thread_current ()->fd_table[fd];
+    if (f)
+      bytes_read = file_read (f, buffer, size);
+  }
+
+  lock_release (&filesys_lock);
+  return bytes_read;
+}
+
+int
+write (int fd, const void *buffer, unsigned size) {
+  check_user_pointer (buffer);
+
+  int bytes_written = 0;
+  lock_acquire (&filesys_lock);
+
+  if (fd == 1) { /* stdout */
+    putbuf (buffer, size);
+    bytes_written = size;
+  } else if (fd > 1 && fd < MAX_FD) {
+    struct file *f = thread_current ()->fd_table[fd];
+    if (f)
+      bytes_written = file_write (f, buffer, size);
+  }
+
+  lock_release (&filesys_lock);
+  return bytes_written;
+}
 
 void
-syscall_init (void) 
-{
-  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  lock_init(&filesys_lock);
+seek (int fd, unsigned position) {
+  if (fd < 2 || fd >= MAX_FD)
+    return;
+
+  struct file *f = thread_current ()->fd_table[fd];
+  if (f)
+    file_seek (f, position);
 }
 
+unsigned
+tell (int fd) {
+  if (fd < 2 || fd >= MAX_FD)
+    return -1;
 
+  struct file *f = thread_current ()->fd_table[fd];
+  if (f == NULL)
+    return -1;
+
+  return file_tell (f);
+}
+
+void
+close (int fd) {
+  if (fd < 2 || fd >= MAX_FD)
+    return;
+
+  struct file *f = thread_current ()->fd_table[fd];
+  if (f == NULL)
+    return;
+
+  file_close (f);
+  thread_current ()->fd_table[fd] = NULL;
+}
+
+/* System call initialization. */
+void
+syscall_init (void) {
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&filesys_lock);
+}
+
+/* System call handler. */
 static void
-syscall_handler (struct intr_frame *f) 
-{
-  // esp points to the user stack at the time of the syscall
+syscall_handler (struct intr_frame *f) {
   uint32_t *user_esp = f->esp;
+  check_user_pointer (user_esp);
 
-  check_user_pointer(user_esp);
   int syscall_number = *user_esp;
 
-  // Step 3: dispatch to handler
   switch (syscall_number) {
-      case SYS_HALT:
-      {
-          halt();
-          break;
-      }
-      case SYS_EXIT:
-      {
-          int status = *(int *)(user_esp + 1); // argument from user stack
-          exit(status);
-          break;
-      }
-      
-      case SYS_EXEC:
-      {
-        const char *cmd_line = *(const char **)(user_esp + 1);
-        check_user_pointer(cmd_line); // Maybe check the string as well
-        f->eax = exec(cmd_line);
-        break;
-      }
-      case SYS_WAIT:
-      {
-        pid_t pid = *(pid_t *)(user_esp + 1);
-        f->eax = wait(pid);
-        break;
-      }
-      case SYS_CREATE:
-      {
-        const char *file = *(const char **)(user_esp + 1);
-        unsigned initial_size = *(unsigned *)(user_esp + 2);
-        f->eax = create(file, initial_size);
-        break;
-      }
-      case SYS_REMOVE:
-      {
-        const char *file = *(const char **)(user_esp + 1);
-        f->eax = remove(file);
-        break;
-      }
-      case SYS_OPEN:
-      {
-        const char *file = *(const char **)(user_esp + 1);
-        f->eax = open(file);
-        break;
-      }
-      case SYS_FILESIZE:
-      {
-        int fd = *(int *)(user_esp + 1);
-        f->eax = filesize(fd);
-        break;
-      }
-      case SYS_READ:
-      {
-        int fd = *(int *)(user_esp + 1);
-        char *buffer = *(char **)(user_esp + 2);
-        unsigned size = *(unsigned *)(user_esp + 3);
+    case SYS_HALT:
+      halt ();
+      break;
 
-        check_user_pointer(buffer); // make sure buffer is valid
-        f->eax = read(fd, buffer, size);
-        break;
-      }
-      case SYS_WRITE:
-      {
-          int fd = *(int *)(user_esp + 1);
-          char *buffer = *(char **)(user_esp + 2);
-          unsigned size = *(unsigned *)(user_esp + 3);
+    case SYS_EXIT: {
+      check_user_pointer (user_esp + 1);
+      int status = *(int *)(user_esp + 1);
+      exit (status);
+      break;
+    }
 
-          check_user_pointer(buffer); // make sure buffer is valid
-          f->eax = write(fd, buffer, size);
-          break;
-      }
-      case SYS_SEEK:
-      {
-        int fd = *(int *)(user_esp + 1);
-        unsigned position = *(unsigned *)(user_esp + 2);
-        seek(fd, position);
-        break;
-      }
-      case SYS_TELL:
-      {
-        int fd = *(int *)(user_esp + 1);
-        f->eax = tell(fd);
-        break;
-      }
-      case SYS_CLOSE:
-      {
-        int fd = *(int *)(user_esp + 1);
-        close(fd);
-        break;
-      }
-        
-      default:
-          printf("Unknown syscall %d\n", syscall_number);
-          exit(-1);
-          break;
+    case SYS_EXEC: {
+      check_user_pointer (user_esp + 1);
+      const char *cmd_line = *(const char **)(user_esp + 1);
+      check_user_pointer (cmd_line);
+      f->eax = exec (cmd_line);
+      break;
+    }
+
+    case SYS_WAIT: {
+      check_user_pointer (user_esp + 1);
+      pid_t pid = *(pid_t *)(user_esp + 1);
+      f->eax = wait (pid);
+      break;
+    }
+
+    case SYS_CREATE: {
+      check_user_pointer (user_esp + 1);
+      check_user_pointer (user_esp + 2);
+      const char *file = *(const char **)(user_esp + 1);
+      unsigned initial_size = *(unsigned *)(user_esp + 2);
+      f->eax = create (file, initial_size);
+      break;
+    }
+
+    case SYS_REMOVE: {
+      check_user_pointer (user_esp + 1);
+      const char *file = *(const char **)(user_esp + 1);
+      f->eax = remove (file);
+      break;
+    }
+
+    case SYS_OPEN: {
+      check_user_pointer (user_esp + 1);
+      const char *file = *(const char **)(user_esp + 1);
+      f->eax = open (file);
+      break;
+    }
+
+    case SYS_FILESIZE: {
+      check_user_pointer (user_esp + 1);
+      int fd = *(int *)(user_esp + 1);
+      f->eax = filesize (fd);
+      break;
+    }
+
+    case SYS_READ: {
+      check_user_pointer (user_esp + 1);
+      check_user_pointer (user_esp + 2);
+      check_user_pointer (user_esp + 3);
+      int fd = *(int *)(user_esp + 1);
+      void *buffer = *(void **)(user_esp + 2);
+      unsigned size = *(unsigned *)(user_esp + 3);
+      check_user_pointer (buffer);
+      f->eax = read (fd, buffer, size);
+      break;
+    }
+
+    case SYS_WRITE: {
+      check_user_pointer (user_esp + 1);
+      check_user_pointer (user_esp + 2);
+      check_user_pointer (user_esp + 3);
+      int fd = *(int *)(user_esp + 1);
+      const void *buffer = *(const void **)(user_esp + 2);
+      unsigned size = *(unsigned *)(user_esp + 3);
+      check_user_pointer (buffer);
+      f->eax = write (fd, buffer, size);
+      break;
+    }
+
+    case SYS_SEEK: {
+      check_user_pointer (user_esp + 1);
+      check_user_pointer (user_esp + 2);
+      int fd = *(int *)(user_esp + 1);
+      unsigned pos = *(unsigned *)(user_esp + 2);
+      seek (fd, pos);
+      break;
+    }
+
+    case SYS_TELL: {
+      check_user_pointer (user_esp + 1);
+      int fd = *(int *)(user_esp + 1);
+      f->eax = tell (fd);
+      break;
+    }
+
+    case SYS_CLOSE: {
+      check_user_pointer (user_esp + 1);
+      int fd = *(int *)(user_esp + 1);
+      close (fd);
+      break;
+    }
+
+    default:
+      exit (-1);
+      break;
   }
 }
-
