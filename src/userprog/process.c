@@ -82,29 +82,29 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  // --- NEW CODE for Argument Parsing ---
-  char * file_name_copy;
-  file_name_copy = palloc_get_page(0);
-  // Ensure we check for allocation failure (good practice)
-  if (file_name_copy == NULL) {
-      palloc_free_page (file_name);
-      thread_exit ();
-  }
-  strlcpy(file_name_copy, file_name, PGSIZE);
+  // // --- NEW CODE for Argument Parsing ---
+  // char * file_name_copy;
+  // file_name_copy = palloc_get_page(0);
+  // // Ensure we check for allocation failure (good practice)
+  // if (file_name_copy == NULL) {
+  //     palloc_free_page (file_name);
+  //     thread_exit ();
+  // }
+  // strlcpy(file_name_copy, file_name, PGSIZE);
 
-  char *argv[MAX_CMD_ARGS];
-  int argc;
+  // char *argv[MAX_CMD_ARGS];
+  // int argc;
 
-  argc = parse_arguments(file_name_copy, argv, MAX_CMD_ARGS);
+  // argc = parse_arguments(file_name_copy, argv, MAX_CMD_ARGS);
 
-  if (argc == 0) {
-      palloc_free_page (file_name_copy);
-      palloc_free_page (file_name); // Free the original if you alloced it
-      thread_exit ();
-  }
+  // if (argc == 0) {
+  //     palloc_free_page (file_name_copy);
+  //     palloc_free_page (file_name); // Free the original if you alloced it
+  //     thread_exit ();
+  // }
   
-  char *program_name = argv[0];
-  // --- END NEW CODE ---
+  // char *program_name = argv[0];
+  // // --- END NEW CODE ---
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -113,98 +113,98 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   
   // --- MODIFIED LINE ---
-  success = load (program_name, &if_.eip, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp);
   // --- END MODIFIED LINE ---
 
   /* If load failed, quit. */
-  palloc_free_page (file_name_copy);
+  // palloc_free_page (file_name_copy);
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
   
 
-/* --- [START] STACK SETUP FOR ARGUMENT PASSING --- */
+// /* --- [START] STACK SETUP FOR ARGUMENT PASSING --- */
   
-  /* We will build the stack in the following order (from high to low addr):
-   * 1. Argument strings (e.g., "grep", "foo", "bar", "\0")
-   * 2. Word-align padding (0-3 bytes of zeros)
-   * 3. Pointers to arguments (argv[argc], ..., argv[0])
-   * 4. Pointer to argv (argv)
-   * 5. Argument count (argc)
-   * 6. Fake return address (0)
-   */
+//   /* We will build the stack in the following order (from high to low addr):
+//    * 1. Argument strings (e.g., "grep", "foo", "bar", "\0")
+//    * 2. Word-align padding (0-3 bytes of zeros)
+//    * 3. Pointers to arguments (argv[argc], ..., argv[0])
+//    * 4. Pointer to argv (argv)
+//    * 5. Argument count (argc)
+//    * 6. Fake return address (0)
+//    */
 
-  /* This array will store the user-space pointers to the arguments 
-     AFTER we copy them to the user's stack. */
-  char *user_argv_ptrs[MAX_CMD_ARGS];
-  int i;
-  size_t total_len = 0;
+//   /* This array will store the user-space pointers to the arguments 
+//      AFTER we copy them to the user's stack. */
+//   char *user_argv_ptrs[MAX_CMD_ARGS];
+//   int i;
+//   size_t total_len = 0;
 
-  uint8_t *kpage = pagedir_get_page(thread_current()->pagedir, PHYS_BASE - PGSIZE);
-  uint8_t *ksp = kpage + PGSIZE;
-  if_.esp = PHYS_BASE;
-  /* 1. Push Argument Strings (in reverse order for convenience) */
-  /* We iterate from argc-1 down to 0 */
-  for (i = argc - 1; i >= 0; i--) 
-    {
-      size_t len = strlen(argv[i]) + 1; // +1 for the '\0'
+//   uint8_t *kpage = pagedir_get_page(thread_current()->pagedir, PHYS_BASE - PGSIZE);
+//   uint8_t *ksp = kpage + PGSIZE;
+//   if_.esp = PHYS_BASE;
+//   /* 1. Push Argument Strings (in reverse order for convenience) */
+//   /* We iterate from argc-1 down to 0 */
+//   for (i = argc - 1; i >= 0; i--) 
+//     {
+//       size_t len = strlen(argv[i]) + 1; // +1 for the '\0'
       
-      /* Decrement stack pointer */
-      if_.esp -= len;
-      ksp -= len;
+//       /* Decrement stack pointer */
+//       if_.esp -= len;
+//       ksp -= len;
       
-      /* Copy the string to the user stack */
-      memcpy(ksp, argv[i], len);
+//       /* Copy the string to the user stack */
+//       memcpy(ksp, argv[i], len);
       
-      /* Store the user-space address of this string */
-      user_argv_ptrs[i] = if_.esp;
+//       /* Store the user-space address of this string */
+//       user_argv_ptrs[i] = if_.esp;
 
-      total_len += len;
-    }
+//       total_len += len;
+//     }
 
-  /* 2. Word-Align Padding */
-  /* The stack pointer must be aligned to a 4-byte boundary. */
-  /* We use (uintptr_t) to treat the pointer as an integer. */
-  int padding = (uintptr_t)if_.esp % 4;
-  if (padding != 0) 
-    {
-      if_.esp -= padding;
+//   /* 2. Word-Align Padding */
+//   /* The stack pointer must be aligned to a 4-byte boundary. */
+//   /* We use (uintptr_t) to treat the pointer as an integer. */
+//   int padding = (uintptr_t)if_.esp % 4;
+//   if (padding != 0) 
+//     {
+//       if_.esp -= padding;
       
-      /* Zero out the padding bytes */
-      memset(if_.esp, 0, padding);
-    }
+//       /* Zero out the padding bytes */
+//       memset(if_.esp, 0, padding);
+//     }
     
-  /* 3. Push Pointers to Arguments */
+//   /* 3. Push Pointers to Arguments */
   
-  /* First, push the NULL sentinel (argv[argc]) */
-  if_.esp -= sizeof(char *);
-  *(char **)if_.esp = NULL; 
+//   /* First, push the NULL sentinel (argv[argc]) */
+//   if_.esp -= sizeof(char *);
+//   *(char **)if_.esp = NULL; 
 
-  /* Now, push the pointers to the argument strings (argv[argc-1]...argv[0]) */
-  for (i = argc - 1; i >= 0; i--) 
-    {
-      if_.esp -= sizeof(char *);
+//   /* Now, push the pointers to the argument strings (argv[argc-1]...argv[0]) */
+//   for (i = argc - 1; i >= 0; i--) 
+//     {
+//       if_.esp -= sizeof(char *);
       
-      /* *(char **)if_.esp casts esp to a "pointer to a char pointer"
-         and then dereferences it, setting its value. */
-      *(char **)if_.esp = user_argv_ptrs[i];
-    }
+//       /* *(char **)if_.esp casts esp to a "pointer to a char pointer"
+//          and then dereferences it, setting its value. */
+//       *(char **)if_.esp = user_argv_ptrs[i];
+//     }
 
-  /* 4. Push Pointer to argv (the start of the argv array) */
-  /* The current stack pointer *is* the address of argv[0] */
-  char **argv_start_ptr = (char **)if_.esp;
-  if_.esp -= sizeof(char **);
-  *(char ***)if_.esp = argv_start_ptr;
+//   /* 4. Push Pointer to argv (the start of the argv array) */
+//   /* The current stack pointer *is* the address of argv[0] */
+//   char **argv_start_ptr = (char **)if_.esp;
+//   if_.esp -= sizeof(char **);
+//   *(char ***)if_.esp = argv_start_ptr;
 
-  /* 5. Push Argument Count (argc) */
-  if_.esp -= sizeof(int);
-  *(int *)if_.esp = argc;
+//   /* 5. Push Argument Count (argc) */
+//   if_.esp -= sizeof(int);
+//   *(int *)if_.esp = argc;
 
-  /* 6. Push Fake Return Address (0) */
-  if_.esp -= sizeof(void *);
-  *(void **)if_.esp = NULL;
+//   /* 6. Push Fake Return Address (0) */
+//   if_.esp -= sizeof(void *);
+//   *(void **)if_.esp = NULL;
 
-  /* --- [END] STACK SETUP --- */
+//   /* --- [END] STACK SETUP --- */
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in

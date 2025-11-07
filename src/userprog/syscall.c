@@ -74,13 +74,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       }
       case SYS_WRITE:
       {
-          int fd = *(int *)(user_esp + 1);
-          char *buffer = *(char **)(user_esp + 2);
-          unsigned size = *(unsigned *)(user_esp + 3);
+        //   int fd = *(int *)(user_esp + 1);
+        //   char *buffer = *(char **)(user_esp + 2);
+        //   unsigned size = *(unsigned *)(user_esp + 3);
 
-          check_user_pointer(buffer); // make sure buffer is valid
-          write(fd, buffer, size);
-          break;
+        //   check_user_pointer(buffer); // make sure buffer is valid
+        //   write(fd, buffer, size);
+        //   break;
+        printf("Trying To Print");
       }
       default:
           printf("Unknown syscall %d\n", syscall_number);
