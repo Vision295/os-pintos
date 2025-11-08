@@ -28,18 +28,43 @@ check_user_pointer (const void *uaddr) {
     exit (-1);
 }
 
+
 static void
 check_user_pointer_range(const void *uaddr, size_t size) {
     struct thread *t = thread_current();
-    const uint8_t *ptr = uaddr;
+    const void *start = uaddr;
+    // Calculate the last byte of the buffer. 
+    // If size is 0, this check will be skipped, which is correct.
+    const void *end = (const char *)uaddr + size - 1; 
 
-    for (size_t i = 0; i < size; i++) {
-        if (ptr + i == NULL || !is_user_vaddr(ptr + i) ||
-            pagedir_get_page(t->pagedir, ptr + i) == NULL) {
-            exit(-1); // terminate process safely
+    // The current address pointer for iteration, starting at the beginning
+    const void *current_ptr = start;
+
+    // Check 1: Simple V-Address and NULL check for the entire range
+    if (!is_user_vaddr(start) || !is_user_vaddr(end) || start == NULL) {
+        exit(-1);
+    }
+
+    // Check 2: Iterate over pages within the range
+    while (current_ptr <= end) {
+        // 1. Check if the address is above the kernel boundary (already done above, but safe)
+        if (!is_user_vaddr(current_ptr)) {
+            exit(-1);
         }
+
+        // 2. Check if the page is mapped in the process's page directory
+        if (pagedir_get_page(t->pagedir, current_ptr) == NULL) {
+            exit(-1);
+        }
+
+        // Move to the beginning of the *next* page. 
+        // If current_ptr is already at a page boundary, 
+        // PGSIZE will move it to the next one.
+        // This is much faster than checking byte-by-byte.
+        current_ptr = pg_round_down(current_ptr) + PGSIZE;
     }
 }
+
 static void check_user_string(const char *str) {
     while (true) {
         check_user_pointer(str); // check this byte
@@ -235,10 +260,12 @@ syscall_init (void) {
 static void
 syscall_handler (struct intr_frame *f) {
   uint32_t *user_esp = f->esp;
+  
+  /* First, validate the stack pointer itself */
   check_user_pointer (user_esp);
-  check_user_pointer_range(user_esp, sizeof(int));         // syscall number
-  check_user_pointer_range(f->esp + 4, sizeof(char*)); // exec pointer
-
+  
+  /* Validate we can read the syscall number (a 4-byte int) */
+  check_user_pointer_range(user_esp, sizeof(int));
 
   int syscall_number = *user_esp;
 
@@ -273,6 +300,7 @@ syscall_handler (struct intr_frame *f) {
       check_user_pointer (user_esp + 1);
       check_user_pointer (user_esp + 2);
       const char *file = *(const char **)(user_esp + 1);
+      check_user_string (file);
       unsigned initial_size = *(unsigned *)(user_esp + 2);
       f->eax = create (file, initial_size);
       break;
@@ -281,6 +309,7 @@ syscall_handler (struct intr_frame *f) {
     case SYS_REMOVE: {
       check_user_pointer (user_esp + 1);
       const char *file = *(const char **)(user_esp + 1);
+      check_user_string (file);
       f->eax = remove (file);
       break;
     }
@@ -288,6 +317,7 @@ syscall_handler (struct intr_frame *f) {
     case SYS_OPEN: {
       check_user_pointer (user_esp + 1);
       const char *file = *(const char **)(user_esp + 1);
+      check_user_string (file);
       f->eax = open (file);
       break;
     }
@@ -300,25 +330,31 @@ syscall_handler (struct intr_frame *f) {
     }
 
     case SYS_READ: {
-      check_user_pointer (user_esp + 1);
-      check_user_pointer (user_esp + 2);
-      check_user_pointer (user_esp + 3);
+      check_user_pointer_range(user_esp + 1, sizeof(int));
+      check_user_pointer_range(user_esp + 2, sizeof(void *));
+      check_user_pointer_range(user_esp + 3, sizeof(unsigned));
+
+      /* Now it's safe to read the arguments */
       int fd = *(int *)(user_esp + 1);
       void *buffer = *(void **)(user_esp + 2);
       unsigned size = *(unsigned *)(user_esp + 3);
-      check_user_pointer (buffer);
+      
       f->eax = read (fd, buffer, size);
       break;
     }
 
     case SYS_WRITE: {
-      check_user_pointer (user_esp + 1);
-      check_user_pointer (user_esp + 2);
-      check_user_pointer (user_esp + 3);
+      check_user_pointer_range(user_esp + 1, sizeof(int));
+      check_user_pointer_range(user_esp + 2, sizeof(void *));
+      check_user_pointer_range(user_esp + 3, sizeof(unsigned));
+
       int fd = *(int *)(user_esp + 1);
       const void *buffer = *(const void **)(user_esp + 2);
       unsigned size = *(unsigned *)(user_esp + 3);
+      
+      /* Validate the buffer pointer - this is where bad-write2 test fails */
       check_user_pointer (buffer);
+      
       f->eax = write (fd, buffer, size);
       break;
     }
