@@ -230,23 +230,23 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   
-  // if (cur->child_info) {
-  //   cur->child_info->has_exited = true;
-  //   sema_up (&cur->child_info->wait_sema);
-  // }
+  if (cur->child_info) {
+    cur->child_info->has_exited = true;
+    sema_up (&cur->child_info->wait_sema);
+  }
   
-  // for (int fd = 2; fd < MAX_FD; fd++){
-  //   if(cur->fd_table[fd] != NULL){
-  //     file_close(cur->fd_table[fd]);
-  //     cur->fd_table[fd] = NULL;
-  //   }
-  // }
+  for (int fd = 2; fd < MAX_FD; fd++){
+    if(cur->fd_table[fd] != NULL){
+      file_close(cur->fd_table[fd]);
+      cur->fd_table[fd] = NULL;
+    }
+  }
 
 
   if(cur->executable != NULL){
     // DEBUG
-    //file_close(cur->executable);
-    file_allow_write(cur->executable);
+    file_close(cur->executable);
+    //file_allow_write(cur->executable);
     cur->executable = NULL;
   }
 
@@ -380,7 +380,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
   //DEBUG
-  t->executable = file;
+  //t->executable = file;
   file_deny_write(file);
 
   /* Read and verify executable header. */
@@ -464,12 +464,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   success = true;
   //DEBUG
-  //t->executable = file;
-  //file = NULL;
+  t->executable = file;
+  file = NULL;
 
  done:
   /* We arrive here whether the load is successful or not. */
-  if(!success && file != NULL)
+  if(file != NULL)
     file_close (file);
   return success;
 }

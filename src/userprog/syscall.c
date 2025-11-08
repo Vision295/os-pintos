@@ -89,14 +89,13 @@ halt (void) {
 void
 exit (int status) {
   struct thread *cur = thread_current ();
-  printf("Made it here2\n");
-  //cur->child_info->exit_status = status;
+  cur->child_info->exit_status = status;
   // DEBUG
-  if (cur->child_info) {
-    cur->child_info->exit_status = status;
-    cur->child_info->has_exited = true;
-    sema_up (&cur->child_info->wait_sema);
-  }
+  // if (cur->child_info) {
+  //   cur->child_info->exit_status = status;
+  //   cur->child_info->has_exited = true;
+  //   sema_up (&cur->child_info->wait_sema);
+  // }
 
   printf ("%s: exit(%d)\n", cur->name, status);
   thread_exit ();
@@ -159,12 +158,12 @@ open (const char *file) {
     return -1;
 
   // DEBUG  
-  // struct thread *cur = thread_current();
-  // if(cur->executable != NULL){
-  //   if(file_get_inode(f) == file_get_inode(cur->executable)){
-  //     file_deny_write(f);
-  //   }
-  // }
+  struct thread *cur = thread_current();
+  if(cur->executable != NULL){
+    if(file_get_inode(f) == file_get_inode(cur->executable)){
+      file_deny_write(f);
+    }
+  }
   int fd = thread_get_fd ();
   if (fd == -1) {
     file_close (f);
