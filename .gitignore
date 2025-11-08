@@ -27,6 +27,7 @@
 # DEVICES directory
 !src/devices/timer.c
 !src/devices/timer.h
+!src/userprog/exception.c
 
 
 
