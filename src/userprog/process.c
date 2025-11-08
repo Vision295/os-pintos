@@ -66,7 +66,7 @@ process_execute (const char *file_name)
   // Synchronization part 1
   // Initializing child info
 
-  struct child_info *info = malloc(sizeof(struct child_info));
+  struct child_info *info = palloc_get_page(PAL_ZERO);
   info->exit_status = -1;
   info->has_exited = false;
   info->has_been_waited_on = false;
@@ -74,7 +74,7 @@ process_execute (const char *file_name)
   sema_init(&info->load_sema, 0);
   sema_init(&info->wait_sema, 0);
   
-  struct exec_data *data = malloc(sizeof(struct exec_data));
+  struct exec_data *data = palloc_get_page(PAL_ZERO);
   data->name = name;
   data->args = args;
   data->child_info = info;
@@ -84,8 +84,8 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR){
     palloc_free_page(name);
     palloc_free_page(args);
-    free(info);
-    free(data);
+    palloc_free_page(info);
+    palloc_free_page(data);
     return TID_ERROR;
   }
   // Synchronization
@@ -121,7 +121,7 @@ start_process (void *data_)
   /* If load failed, quit. */
   palloc_free_page (data->name);
   palloc_free_page(data->args);
-  free(data);
+  palloc_free_page(data);
   if (!success) 
     thread_exit ();
   /* Start the user process by simulating a return from an
@@ -219,7 +219,7 @@ process_wait (tid_t child_tid UNUSED)
   }
   int status = info->exit_status;
   list_remove(&info->elem); // Remove the child
-  free(info); // Free the memory that was allocated in process_execute
+  palloc_free_page(info); // Free the memory that was allocated in process_execute
   return status;
 }
 
@@ -230,21 +230,23 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   
-  if (cur->child_info) {
-    cur->child_info->has_exited = true;
-    sema_up (&cur->child_info->wait_sema);
-  }
+  // if (cur->child_info) {
+  //   cur->child_info->has_exited = true;
+  //   sema_up (&cur->child_info->wait_sema);
+  // }
   
-  for (int fd = 2; fd < MAX_FD; fd++){
-    if(cur->fd_table[fd] != NULL){
-      file_close(cur->fd_table[fd]);
-      cur->fd_table[fd] = NULL;
-    }
-  }
+  // for (int fd = 2; fd < MAX_FD; fd++){
+  //   if(cur->fd_table[fd] != NULL){
+  //     file_close(cur->fd_table[fd]);
+  //     cur->fd_table[fd] = NULL;
+  //   }
+  // }
 
 
   if(cur->executable != NULL){
-    file_close(cur->executable);
+    // DEBUG
+    //file_close(cur->executable);
+    file_allow_write(cur->executable);
     cur->executable = NULL;
   }
 
@@ -377,6 +379,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+  //DEBUG
+  t->executable = file;
   file_deny_write(file);
 
   /* Read and verify executable header. */
@@ -459,12 +463,13 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-  t->executable = file;
-  file = NULL;
+  //DEBUG
+  //t->executable = file;
+  //file = NULL;
 
  done:
   /* We arrive here whether the load is successful or not. */
-  if(file != NULL)
+  if(!success && file != NULL)
     file_close (file);
   return success;
 }
