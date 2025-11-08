@@ -228,11 +228,6 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  if(cur->executable != NULL){
-    file_allow_write(cur->executable);
-    cur->executable = NULL;
-  }
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -362,9 +357,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-  t->executable = file;
-  file_deny_write(file);
-  
+
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -448,8 +441,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  if(!success && file != NULL)
-    file_close (file);
+  file_close (file);
   return success;
 }
 
