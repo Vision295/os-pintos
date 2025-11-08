@@ -60,11 +60,12 @@ void
 exit (int status) {
   struct thread *cur = thread_current ();
 
-  if (cur->child_info) {
-    cur->child_info->exit_status = status;
-    cur->child_info->has_exited = true;
-    sema_up (&cur->child_info->wait_sema);
-  }
+  cur->child_info->exit_status = status;
+  // if (cur->child_info) {
+  //   cur->child_info->exit_status = status;
+  //   cur->child_info->has_exited = true;
+  //   sema_up (&cur->child_info->wait_sema);
+  // }
 
   printf ("%s: exit(%d)\n", cur->name, status);
   thread_exit ();
@@ -126,6 +127,12 @@ open (const char *file) {
   if (f == NULL)
     return -1;
 
+  struct thread *cur = thread_current();
+  if(cur->executable != NULL){
+    if(file_get_inode(f) == file_get_inode(cur->executable)){
+      file_deny_write(f);
+    }
+  }
   int fd = thread_get_fd ();
   if (fd == -1) {
     file_close (f);
