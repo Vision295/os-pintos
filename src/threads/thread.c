@@ -500,7 +500,7 @@ init_thread (struct thread *t, const char *name, int priority)
   for (int i = 0; i < MAX_FD; i++){
     t->fd_table[i] = NULL;
   }
-
+  t->executable = NULL;
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);

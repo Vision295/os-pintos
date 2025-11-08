@@ -104,6 +104,7 @@ struct thread
     struct list children;
     struct child_info *child_info;
     struct thread *parent;
+    struct file *executable;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
