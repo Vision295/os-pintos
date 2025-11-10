@@ -240,7 +240,7 @@ setup_stack_args(void **esp, char *file_name, char *cmd_line){
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // Get to info of the right child
+  // Get to info of the correct child
   struct child_info *info = thread_find_child(child_tid);
   // If pid is not a child or has been called already 
   if (!info || info->has_been_waited_on){
@@ -264,18 +264,19 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   
+  // Signal to children that we have exited
   if (cur->child_info) {
     cur->child_info->has_exited = true;
     sema_up (&cur->child_info->wait_sema);
   }
   
+  // Close all open instances of files (described by file descriptors)
   for (int fd = 2; fd < MAX_FD; fd++){
     if(cur->fd_table[fd] != NULL){
       file_close(cur->fd_table[fd]);
       cur->fd_table[fd] = NULL;
     }
   }
-
 
   // restore writes on executable file
   if(cur->executable != NULL){

@@ -376,6 +376,7 @@ thread_get_recent_cpu (void)
   return 0;
 }
 
+// Returns the next available file descriptor for the current thread
 int
 thread_get_fd(void){
   struct thread *t = thread_current();
@@ -387,6 +388,7 @@ thread_get_fd(void){
   return -1;
 }
 
+// Finds the child_info struct for a given pid in the current thread's children list
 struct child_info * 
 thread_find_child(pid_t pid){
   struct thread *cur = thread_current();
