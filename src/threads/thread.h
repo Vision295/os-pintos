@@ -100,10 +100,14 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    // file descriptor table
     struct file *fd_table[MAX_FD];
     struct list children;
+    // its info as a child
     struct child_info *child_info;
+    // its info as a parent
     struct thread *parent;
+    // the executable file linked to it to deny writes on executables
     struct file *executable;
 
 #ifdef USERPROG
