@@ -157,13 +157,15 @@ open (const char *file) {
   if (f == NULL)
     return -1;
 
-  // DEBUG  
+  // Deny write if the file is the executable of the current process
+  // to avoid to open the executable for writing
   struct thread *cur = thread_current();
   if(cur->executable != NULL){
     if(file_get_inode(f) == file_get_inode(cur->executable)){
       file_deny_write(f);
     }
   }
+
   int fd = thread_get_fd ();
   if (fd == -1) {
     file_close (f);

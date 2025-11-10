@@ -41,12 +41,15 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  // Parse out the program name (first token)
   char *save_ptr;
   char *token = strtok_r(fn_copy, " ", &save_ptr);
   if(token == NULL){
     palloc_free_page(fn_copy);
     return TID_ERROR;
   }
+
+  // Make copies of name and args
   char *name = palloc_get_page(0);
   char *args = palloc_get_page(0);
   if (name == NULL || args == NULL){
@@ -56,6 +59,8 @@ process_execute (const char *file_name)
     return TID_ERROR;
   }
   strlcpy(name, token, PGSIZE);
+
+  // Copy the remaining command line arguments
   if (save_ptr != NULL && *save_ptr != '\0'){
     strlcpy(args, save_ptr, PGSIZE);
   } else {
@@ -65,7 +70,6 @@ process_execute (const char *file_name)
 
   // Synchronization part 1
   // Initializing child info
-
   struct child_info *info = palloc_get_page(PAL_ZERO);
   info->exit_status = -1;
   info->has_exited = false;
@@ -74,6 +78,7 @@ process_execute (const char *file_name)
   sema_init(&info->load_sema, 0);
   sema_init(&info->wait_sema, 0);
   
+  // Prepare exec data
   struct exec_data *data = palloc_get_page(PAL_ZERO);
   data->name = name;
   data->args = args;
@@ -88,9 +93,11 @@ process_execute (const char *file_name)
     palloc_free_page(data);
     return TID_ERROR;
   }
+
   // Synchronization
   info->pid = tid;
   list_push_back(&thread_current()->children, &info->elem);
+
   return tid;
 }
 
@@ -100,11 +107,13 @@ static void
 start_process (void *data_)
 {
   struct exec_data *data = (struct exec_data*)data_;
-  char *file_name = data->name;
-  char *cmd_line = data->args;
+
+  // update accordingly to exec data
+  char *file_name         = data->name;
+  char *cmd_line          = data->args;
   struct child_info *info = data->child_info;
+
   struct intr_frame if_;
-  bool success;
   thread_current()->child_info = info;
   
   /* Initialize interrupt frame and load executable. */
@@ -112,16 +121,25 @@ start_process (void *data_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+
+  // Load the executable
+  bool success;
   success = load (file_name, &if_.eip, &if_.esp);
+
+  // Set up stack arguments
   if(success){
     success = setup_stack_args(&if_.esp, file_name, cmd_line);
   }
+
+  // load is complete
   info->load_success = success;
   sema_up(&info->load_sema);
+
   /* If load failed, quit. */
-  palloc_free_page (data->name);
+  palloc_free_page(data->name);
   palloc_free_page(data->args);
   palloc_free_page(data);
+
   if (!success) 
     thread_exit ();
   /* Start the user process by simulating a return from an
@@ -138,8 +156,20 @@ start_process (void *data_)
 
 static bool
 setup_stack_args(void **esp, char *file_name, char *cmd_line){
+  /*
+    Push arguments onto the stack in the following order:
+    1. The program name and arguments (as strings)
+    2. Word align to a multiple of 4
+    3. A null pointer sentinel
+    4. Pointers to each argument (char **argv)
+    5. The number of arguments (int argc)
+    6. A fake return address 
+  */
+
   char *token, *save_ptr;
+  // addresses of arguments
   char *argv[128];
+  // Number of arguments
   int argc = 0;
 
   // Push program name
@@ -148,26 +178,28 @@ setup_stack_args(void **esp, char *file_name, char *cmd_line){
   memcpy(*esp, file_name, len);
   argv[argc] = *esp;
   argc++;
+
   // Push the arguments
   if(cmd_line != NULL && strlen(cmd_line) > 0){
+    // Tokenize and push each argument
     for (token = strtok_r(cmd_line, " ", &save_ptr); token != NULL;
         token = strtok_r(NULL, " ", &save_ptr)){
-          
+
       len = strlen(token) + 1;
       *esp -= len;
       memcpy(*esp, token, len);
       argv[argc] = *esp;
       argc++;
-      if(argc >= 128){
-        return false;
-      }
+      if(argc >= 128) return false;
     }
   }
+
   // Word align to multiples of 4
   while ((uintptr_t)*esp % 4 != 0){
     *esp -= 1;
     *(uint8_t *)(*esp) = 0;
   }
+
   // Push null pointer sentinel
   *esp -= sizeof(char *);
   *(char **)(*esp) = NULL;
@@ -177,6 +209,7 @@ setup_stack_args(void **esp, char *file_name, char *cmd_line){
     *esp -= sizeof(char *);
     *(char **)(*esp) = argv[i];
   }
+  
   // Push argv
   char **argv_ptr = *esp;
   *esp -= sizeof(char **);
@@ -189,6 +222,7 @@ setup_stack_args(void **esp, char *file_name, char *cmd_line){
   // Push fake return address
   *esp -= sizeof(void *);
   *(void **)(*esp) = NULL;   
+  // success 
   return true;
 }
 
@@ -243,10 +277,10 @@ process_exit (void)
   }
 
 
+  // restore writes on executable file
   if(cur->executable != NULL){
-    // DEBUG
+    // close the executable file and update the current thread info
     file_close(cur->executable);
-    //file_allow_write(cur->executable);
     cur->executable = NULL;
   }
 
@@ -379,8 +413,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-  //DEBUG
-  //t->executable = file;
+
+  // deny execution of the executable file
   file_deny_write(file);
 
   /* Read and verify executable header. */
@@ -463,7 +497,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-  //DEBUG
+  
+  // deny writes on executable file : define the executable file 
   t->executable = file;
   file = NULL;
 
