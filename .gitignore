@@ -41,3 +41,10 @@
 # process
 !src/userprog/process.c
 !src/userprog/process.h
+
+# Project 3
+!src/vm
+src/vm/*
+!src/vm/Make.vars
+!src/vm/frame.h
+!src/vm/frame.c
