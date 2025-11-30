@@ -9,6 +9,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/frame.h"
+
 #ifdef VM
 #include "vm/page.h"
 #endif
@@ -177,6 +179,27 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
+   /*
+   PROJECT 3
+      step 1 - locate faulting page in the supp table:
+         if found :
+            load page into a frame 
+               the page is either in a SWAP SLOT
+                  it was swapped out from memory
+               or in a FILE SYSTEM 
+                  it was not loaded yet
+               or is a ZERO PAGE
+                  new allocation or stack growth
+         else :
+            invalid access : kill process
+      step 2 - obtain a frame to store the page 
+      step 3 - fetch the data into the frame (reading it, then zeroing it, etc...)
+      step 4 - point the table entry to the physical frame it has been allocated to
+   */
+
+   // frame_get_page(fault_addr, thread_current(), false);
+   // pagedir_set_page(thread_current()->pagedir, fault_addr, frame_get_page(fault_addr, thread_current(), false), true);
+   
   kill (f);
 }
 
