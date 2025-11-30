@@ -10,13 +10,13 @@ extern struct list frame_table;
 extern struct lock frame_table_lock;
 
 struct frame {
-    void *kpage;
-    //void *upage;
-    //struct thread *owner;
-    //bool pinned;
-    //size_t swap_slot;
-    struct list_elem elem;
-    struct spt_entry *spte;
+    void *kpage;            // kernel pool page
+    void *upage;            // user pool page
+    struct thread *owner; 
+    // bool pinned;            // for I/O 
+    // size_t swap_slot;       // if frame evicted, store swap slot index 
+    struct list_elem elem; 
+    struct spt_entry *spte; 
 };
 
 void frame_init(void);
@@ -24,7 +24,7 @@ void *frame_allocate(enum palloc_flags flags);
 
 void frame_free(void *kpage);
 
-//void *frame_get_page(void *upage, struct thread *owner, bool zero);
+void *frame_get_page(void *upage, struct thread *owner, bool zero);
 
 
 // Eviction
