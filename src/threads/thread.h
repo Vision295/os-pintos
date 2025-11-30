@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "threads/synch.h"
-
+#include <hash.h>
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -109,7 +109,10 @@ struct thread
     struct thread *parent;
     // the executable file linked to it to deny writes on executables
     struct file *executable;
-
+   
+    struct hash spt;  // Supplemental Page Table
+   
+    //struct hash spt; 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

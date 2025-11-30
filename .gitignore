@@ -48,3 +48,5 @@ src/vm/*
 !src/vm/Make.vars
 !src/vm/frame.h
 !src/vm/frame.c
+!src/vm/page.h
+!src/vm/page.c

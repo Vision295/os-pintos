@@ -31,7 +31,7 @@ check_user_pointer (const void *uaddr) {
 /* Validate that a user pointer range [uaddr, uaddr + size - 1] is in user space and mapped.
    If not, terminate the process. */
 static void
-check_user_pointer_range(const void *uaddr, size_t size) {
+check_user_pointer_range(const void *uaddr, size_t size) { 
     struct thread *t = thread_current();
     
     // Handle empty buffer case
@@ -167,7 +167,6 @@ open (const char *file) {
     file_close (f);
     return -1;
   }
-
   thread_current ()->fd_table[fd] = f;
   return fd;
 }
@@ -177,7 +176,6 @@ filesize (int fd) {
   // if not stdin or stdout
   if (fd < 2 || fd >= MAX_FD)
     return -1;
-
   struct file *f = thread_current ()->fd_table[fd];
   if (f == NULL)
     return -1;
@@ -237,7 +235,6 @@ void
 seek (int fd, unsigned position) {
   if (fd < 2 || fd >= MAX_FD)
     return;
-
   struct file *f = thread_current ()->fd_table[fd];
   if (f)
     file_seek (f, position);
@@ -248,7 +245,6 @@ unsigned
 tell (int fd) {
   if (fd < 2 || fd >= MAX_FD)
     return -1;
-
   struct file *f = thread_current ()->fd_table[fd];
   if (f == NULL)
     return -1;
@@ -260,7 +256,6 @@ void
 close (int fd) {
   if (fd < 2 || fd >= MAX_FD)
     return;
-
   struct file *f = thread_current ()->fd_table[fd];
   if (f == NULL)
     return;

@@ -14,6 +14,9 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#ifdef VM
+#include "vm/page.h"
+#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -98,6 +101,10 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  // SPT
+  // #ifdef VM
+  // spt_init(&initial_thread->spt);
+  // #endif
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -215,7 +222,6 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -290,8 +296,11 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
+  struct thread *cur = thread_current();
   list_remove (&thread_current()->allelem);
+  spt_destroy(&cur->spt);
   thread_current ()->status = THREAD_DYING;
+
   schedule ();
   NOT_REACHED ();
 }
@@ -405,6 +414,7 @@ thread_find_child(pid_t pid){
 }
 
 
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -503,6 +513,11 @@ init_thread (struct thread *t, const char *name, int priority)
     t->fd_table[i] = NULL;
   }
   t->executable = NULL;
+
+  
+  //hash_init(&t->spt_list, spt_hash, spt_less, NULL);
+
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
