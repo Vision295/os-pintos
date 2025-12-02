@@ -31,5 +31,6 @@ struct spt_entry *spt_lookup(struct hash *spt, void *upage);
 bool page_fault_handle(void *fault_addr, bool write);
 void spt_destroy(struct hash *spt);
 
+bool load_page(struct spt_entry *spte);
 
 #endif /* vm/page.h */

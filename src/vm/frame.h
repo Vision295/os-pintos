@@ -13,7 +13,7 @@ struct frame {
     void *kpage;            // kernel pool page
     void *upage;            // user pool page
     struct thread *owner; 
-    // bool pinned;            // for I/O 
+    bool pinned;            // for I/O 
     // size_t swap_slot;       // if frame evicted, store swap slot index 
     struct list_elem elem; 
     struct spt_entry *spte; 
@@ -24,13 +24,15 @@ void *frame_allocate(enum palloc_flags flags);
 
 void frame_free(void *kpage);
 
-void *frame_get_page(void *upage, struct thread *owner, bool zero);
+struct frame *frame_get_page(void *upage, struct thread *owner, bool zero);
 
 
 // Eviction
-//struct frame *frame_choose_victim(void);
-//void frame_pin(struct frame *f);
-//void frame_unpin(struct frame *f);
+bool frame_eviction(void);
+struct frame *frame_choose_victim(void);
+bool frame_evict(struct frame *victim);
+void frame_pin(struct frame *f);
+void frame_unpin(struct frame *f);
 
 // Maybe not needed
 //struct frame *frame_lookup_kpage(void *kpage);
