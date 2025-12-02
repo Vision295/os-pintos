@@ -6,6 +6,7 @@
 #include <hash.h>
 #include "threads/palloc.h" 
 #include "filesys/off_t.h"
+#include "threads/interrupt.h"
 
 struct frame;
 struct file;
@@ -28,7 +29,7 @@ void spt_init(void);
 
 bool spt_insert(struct hash *spt, struct spt_entry *sp);
 struct spt_entry *spt_lookup(struct hash *spt, void *upage);
-bool page_fault_handle(void *fault_addr, bool write);
+bool page_fault_handle(void *fault_addr, bool write, struct intr_frame *f);
 void spt_destroy(struct hash *spt);
 
 

@@ -14,12 +14,15 @@ void frame_init(void){
     return;
 }
 
-void *frame_allocate(enum palloc_flags flags){
+
+// Internal function - should only be called while holding frame_table_lock
+static struct frame *frame_allocate_internal(enum palloc_flags flags, void *upage, struct thread *owner){
     ASSERT(flags & PAL_USER);
+    ASSERT(owner != NULL);
 
     void *kpage = palloc_get_page(flags);
     if (kpage == NULL){
-        return NULL;
+        return NULL;  // Will need eviction
     }
 
     struct frame *f = malloc(sizeof(struct frame));
@@ -29,73 +32,123 @@ void *frame_allocate(enum palloc_flags flags){
     }
 
     f->kpage = kpage;
-    f->spte = NULL;
+    f->upage = upage;
+    f->owner = owner;
+    f->spte = NULL;  // Will be set later
+
+    list_push_back(&frame_table, &f->elem);
+
+    return f;
+}
+
+// Public function to allocate a frame
+struct frame *frame_alloc(enum palloc_flags flags, void *upage) {
+    struct thread *t = thread_current();
+    
+    lock_acquire(&frame_table_lock);
+    struct frame *f = frame_allocate_internal(flags, upage, t);
+    lock_release(&frame_table_lock);
+    
+    return f;
+}
+
+void frame_free(struct frame *frame) {
+    ASSERT(frame != NULL);
 
     lock_acquire(&frame_table_lock);
-    list_push_back(&frame_table, &f->elem);
+
+    // Remove from frame table
+    list_remove(&frame->elem);
+    
     lock_release(&frame_table_lock);
 
-    return kpage;
+    // Free the physical page and frame structure
+    palloc_free_page(frame->kpage);
+    free(frame);
 }
 
-void frame_free(void *kpage) {
-    ASSERT(kpage != NULL);
+// void *frame_allocate(enum palloc_flags flags){
+//     ASSERT(flags & PAL_USER);
 
-    lock_acquire(&frame_table_lock);
+//     void *kpage = palloc_get_page(flags);
+//     if (kpage == NULL){
+//         return NULL;
+//     }
 
-    struct list_elem *e;
-    struct frame *f = NULL;
+//     struct frame *f = malloc(sizeof(struct frame));
+//     if (f == NULL){
+//         palloc_free_page(kpage);
+//         return NULL;
+//     }
 
-    for (e = list_begin(&frame_table);
-        e != list_end(&frame_table);
-        e = list_next(e)){
-            struct frame *temp = list_entry(e, struct frame, elem);
-            if (temp->kpage == kpage){
-                f = temp;
-                break;
-            }
-        }
-    if (f != NULL){
-        list_remove(&f->elem);
-        lock_release(&frame_table_lock);
+//     f->kpage = kpage;
+//     f->spte = NULL;
 
-        palloc_free_page(kpage);
-        free(f);
-    } else {
-        lock_release(&frame_table_lock);
-        PANIC("Attempted to free non existent frame");
-    }
-}
+//     lock_acquire(&frame_table_lock);
+//     list_push_back(&frame_table, &f->elem);
+//     lock_release(&frame_table_lock);
 
-void *frame_get_page(void *upage, struct thread *owner, bool zero) {
-    // get a page from the allocated frame upage 
-    ASSERT(owner != NULL);
-    lock_acquire(&frame_table_lock);
+//     return kpage;
+// }
 
-    // Step 1: Allocate a physical frame
-    void *kpage = frame_allocate(PAL_USER | (zero ? PAL_ZERO : 0));
-    if (kpage == NULL) {
-        // Eviction needed
-        lock_release(&frame_table_lock);
-        return NULL;
-    }
+// void frame_free(void *kpage) {
+//     ASSERT(kpage != NULL);
 
-    // Step 2: Associate frame with this virtual page and thread
-    struct frame *f = malloc(sizeof(struct frame));
-    if (f == NULL) {
-        frame_free(kpage);
-        lock_release(&frame_table_lock);
-        return NULL;
-    }
-    f->kpage = kpage;   // pointer to physical frame
-    // f->spte = f;     // supplemental page table entry for this virtual page
-    f->owner = owner;   // thread that owns this frame
-    f->upage = upage;   // virtual page mapped to this frame
+//     lock_acquire(&frame_table_lock);
+
+//     struct list_elem *e;
+//     struct frame *f = NULL;
+
+//     for (e = list_begin(&frame_table);
+//         e != list_end(&frame_table);
+//         e = list_next(e)){
+//             struct frame *temp = list_entry(e, struct frame, elem);
+//             if (temp->kpage == kpage){
+//                 f = temp;
+//                 break;
+//             }
+//         }
+//     if (f != NULL){
+//         list_remove(&f->elem);
+//         lock_release(&frame_table_lock);
+
+//         palloc_free_page(kpage);
+//         free(f);
+//     } else {
+//         lock_release(&frame_table_lock);
+//         PANIC("Attempted to free non existent frame");
+//     }
+// }
+
+// void *frame_get_page(void *upage, struct thread *owner, bool zero) {
+//     // get a page from the allocated frame upage 
+//     ASSERT(owner != NULL);
+//     lock_acquire(&frame_table_lock);
+
+//     // Step 1: Allocate a physical frame
+//     void *kpage = frame_allocate(PAL_USER | (zero ? PAL_ZERO : 0));
+//     if (kpage == NULL) {
+//         // Eviction needed
+//         lock_release(&frame_table_lock);
+//         return NULL;
+//     }
+
+//     // Step 2: Associate frame with this virtual page and thread
+//     struct frame *f = malloc(sizeof(struct frame));
+//     if (f == NULL) {
+//         frame_free(kpage);
+//         lock_release(&frame_table_lock);
+//         return NULL;
+//     }
+//     f->kpage = kpage;   // pointer to physical frame
+//     // f->spte = f;     // supplemental page table entry for this virtual page
+//     f->owner = owner;   // thread that owns this frame
+//     f->upage = upage;   // virtual page mapped to this frame
 
 
-    // Add the frame to the global frame table
-    list_push_back(&frame_table, &f->elem);
-    lock_release(&frame_table_lock);
+//     // Add the frame to the global frame table
+//     list_push_back(&frame_table, &f->elem);
+//     lock_release(&frame_table_lock);
 
-    return f->kpage;
-}
+//     return f->kpage;
+// }

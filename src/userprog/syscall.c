@@ -278,7 +278,7 @@ syscall_handler (struct intr_frame *f) {
       2. check their validity 
       3. perform the system call  */
   uint32_t *user_esp = f->esp;
-  
+  thread_current()->esp = f->esp;
   /* First, validate the stack pointer itself */
   check_user_pointer (user_esp);
 

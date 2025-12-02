@@ -514,7 +514,9 @@ init_thread (struct thread *t, const char *name, int priority)
   }
   t->executable = NULL;
 
-  
+  // DEBUG
+  t->esp = PHYS_BASE; // initial user stack top
+
   //hash_init(&t->spt_list, spt_hash, spt_less, NULL);
 
 

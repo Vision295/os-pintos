@@ -111,8 +111,7 @@ struct thread
     struct file *executable;
    
     struct hash spt;  // Supplemental Page Table
-   
-    //struct hash spt; 
+   void *esp;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

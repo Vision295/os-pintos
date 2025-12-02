@@ -159,12 +159,11 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   if (user && (fault_addr == NULL || !is_user_vaddr(fault_addr))) {
-   printf("Invalid fault address, calling exit(-1)\n"); 
    exit(-1);
   }
 
   if(not_present && user){
-   if(page_fault_handle(fault_addr, write)){
+   if(page_fault_handle(fault_addr, write, f)){
       return;
    }
   }

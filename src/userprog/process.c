@@ -518,7 +518,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
+bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -663,30 +663,56 @@ setup_stack (void **esp)
   //uint8_t *kpage;
   bool success = false;
   // FRAME
-  void *kpage = frame_allocate(PAL_USER | PAL_ZERO);
+  void *upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
+  struct frame *frame = frame_alloc(PAL_USER | PAL_ZERO, upage);
   //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success){
-        // changes to avoid constant page fault
-        *esp = PHYS_BASE;
-        struct spt_entry *spte = malloc(sizeof(struct spt_entry));
-        if(spte != NULL){
-          spte->upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
-          spte->loaded = true;
-          spte->writable = true;
-          spte->file = NULL;
-          spte->swap_slot = -1;
-          spte->frame = NULL;
-          spt_insert(&thread_current()->spt, spte);
-        }
-      }
-        
-      else
-        frame_free(kpage);
-        //palloc_free_page (kpage);
+  
+  if(frame == NULL){
+    return false;
+  }
+  
+  // Install the page in the page table
+  success = install_page(upage, frame->kpage, true);
+  if (success) {
+    *esp = PHYS_BASE;
+    
+    // Create SPT entry for the stack page
+    struct spt_entry *spte = malloc(sizeof(struct spt_entry));
+    if (spte == NULL) {
+      // Allocation failed - clean up
+      pagedir_clear_page(thread_current()->pagedir, upage);
+      frame_free(frame);
+      return false;
     }
+    
+    // Initialize SPT entry
+    spte->upage = upage;
+    spte->loaded = true;
+    spte->writable = true;
+    spte->file = NULL;
+    spte->ofs = 0;
+    spte->read_bytes = 0;
+    spte->zero_bytes = PGSIZE;
+    spte->swap_slot = (size_t)-1;  // No swap slot initially
+    spte->frame = frame;  // Link to the frame
+    
+    // Link frame to SPT entry
+    frame->spte = spte;
+    
+    // Insert into supplemental page table
+    if (!spt_insert(&thread_current()->spt, spte)) {
+      // Insert failed - clean up
+      pagedir_clear_page(thread_current()->pagedir, upage);
+      frame_free(frame);
+      free(spte);
+      return false;
+    }
+  }
+  else {
+    // install_page failed - free the frame
+    frame_free(frame);
+  }
+  
   return success;
 }
 
@@ -699,7 +725,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
