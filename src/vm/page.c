@@ -201,3 +201,28 @@ static bool spt_less(const struct hash_elem *a, const struct hash_elem *b,
 void spt_init() {
     hash_init(&thread_current()->spt, spt_hash, spt_less, NULL);
 }
+
+// bool load_page(struct spt_entry *spte) {
+//     // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+//     //   {
+//     //     frame_free(kpage);
+//     //     //palloc_free_page (kpage);
+//     //     return false; 
+//     //   }
+
+//     struct frame* f = frame_get_page(spte->upage, thread_current(), false);
+
+//     frame_pin(f);
+
+//     // if spte.is_file_backed:
+//     //     read_from_file_into(f.kpage, spte.file, spte.offset)
+//     // else if spte.is_swapped:
+//     //     swap_in(f.kpage, spte.swap_slot)
+//     // install_page_mapping(f.owner, f.upage, f.kpage)
+
+//     spte->loaded = true;
+//     spte->frame = f;
+//     frame_unpin(f);
+
+//     return true;
+// }

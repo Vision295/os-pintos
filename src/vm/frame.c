@@ -3,152 +3,207 @@
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "userprog/pagedir.h"
+#include "filesys/file.h"
+
+#include "vm/page.h"
+#include "vm/swap.h"
+
 #include <debug.h>
+#include <stdio.h>
 
 struct list frame_table;
 struct lock frame_table_lock;
+size_t clock_hand;
 
 void frame_init(void){
     list_init(&frame_table);
     lock_init(&frame_table_lock);
+    printf("[frame_init] - Frame table initialized\n");
     return;
 }
 
 
-// Internal function - should only be called while holding frame_table_lock
-static struct frame *frame_allocate_internal(enum palloc_flags flags, void *upage, struct thread *owner){
+// Allocate a frame with eviction support
+// Returns frame pointer or NULL if allocation fails
+struct frame *frame_alloc(enum palloc_flags flags, void *upage) {
     ASSERT(flags & PAL_USER);
+    
+    struct thread *owner = thread_current();
     ASSERT(owner != NULL);
-
+    
+    lock_acquire(&frame_table_lock);
+    
+    // Try to allocate physical page
     void *kpage = palloc_get_page(flags);
-    if (kpage == NULL){
-        return NULL;  // Will need eviction
+    
+    // If allocation failed, try eviction once
+    if (kpage == NULL) {
+        lock_release(&frame_table_lock);
+        frame_eviction();
+        lock_acquire(&frame_table_lock);
+        
+        kpage = palloc_get_page(flags);
+        if (kpage == NULL) {
+            lock_release(&frame_table_lock);
+            return NULL;
+        }
     }
-
+    
+    // Allocate frame structure
     struct frame *f = malloc(sizeof(struct frame));
-    if (f == NULL){
+    if (f == NULL) {
         palloc_free_page(kpage);
+        lock_release(&frame_table_lock);
         return NULL;
     }
-
+    
+    // Initialize frame
     f->kpage = kpage;
     f->upage = upage;
     f->owner = owner;
-    f->spte = NULL;  // Will be set later
-
-    list_push_back(&frame_table, &f->elem);
-
-    return f;
-}
-
-// Public function to allocate a frame
-struct frame *frame_alloc(enum palloc_flags flags, void *upage) {
-    struct thread *t = thread_current();
+    f->pinned = false;
+    f->spte = spt_lookup(&owner->spt, upage);
     
-    lock_acquire(&frame_table_lock);
-    struct frame *f = frame_allocate_internal(flags, upage, t);
+    list_push_back(&frame_table, &f->elem);
+    
     lock_release(&frame_table_lock);
     
     return f;
 }
 
+// Free a frame by frame pointer
 void frame_free(struct frame *frame) {
     ASSERT(frame != NULL);
 
     lock_acquire(&frame_table_lock);
-
-    // Remove from frame table
     list_remove(&frame->elem);
-    
     lock_release(&frame_table_lock);
 
-    // Free the physical page and frame structure
     palloc_free_page(frame->kpage);
     free(frame);
 }
 
-// void *frame_allocate(enum palloc_flags flags){
-//     ASSERT(flags & PAL_USER);
 
-//     void *kpage = palloc_get_page(flags);
-//     if (kpage == NULL){
-//         return NULL;
-//     }
+void frame_pin(struct frame *f) {
+    ASSERT(f != NULL);
 
-//     struct frame *f = malloc(sizeof(struct frame));
-//     if (f == NULL){
-//         palloc_free_page(kpage);
-//         return NULL;
-//     }
+    lock_acquire(&frame_table_lock);
+    f->pinned = true;
+    lock_release(&frame_table_lock);
 
-//     f->kpage = kpage;
-//     f->spte = NULL;
+    printf("[frame_pin] - Pinned frame for upage=%p\n", f->upage);
+}
 
-//     lock_acquire(&frame_table_lock);
-//     list_push_back(&frame_table, &f->elem);
-//     lock_release(&frame_table_lock);
+void frame_unpin(struct frame *f) {
+    ASSERT(f != NULL);
 
-//     return kpage;
-// }
+    lock_acquire(&frame_table_lock);
+    f->pinned = false;
+    lock_release(&frame_table_lock);
 
-// void frame_free(void *kpage) {
-//     ASSERT(kpage != NULL);
+    printf("[frame_unpin] - Unpinned frame for upage=%p\n", f->upage);
+}
 
-//     lock_acquire(&frame_table_lock);
+bool frame_eviction(void) {
+    printf("[frame_eviction] - Choosing victim frame\n");
 
-//     struct list_elem *e;
-//     struct frame *f = NULL;
+    struct frame *victim = frame_choose_victim();
+    if (victim == NULL) {
+        printf("[frame_eviction] - No victim found\n");
+        return false;
+    }
 
-//     for (e = list_begin(&frame_table);
-//         e != list_end(&frame_table);
-//         e = list_next(e)){
-//             struct frame *temp = list_entry(e, struct frame, elem);
-//             if (temp->kpage == kpage){
-//                 f = temp;
-//                 break;
-//             }
-//         }
-//     if (f != NULL){
-//         list_remove(&f->elem);
-//         lock_release(&frame_table_lock);
+    printf("[frame_eviction] - Victim found, evicting...\n");
+    return frame_evict(victim);
+}
 
-//         palloc_free_page(kpage);
-//         free(f);
-//     } else {
-//         lock_release(&frame_table_lock);
-//         PANIC("Attempted to free non existent frame");
-//     }
-// }
+struct frame *
+get_frame_at(size_t index) {
+    struct list_elem *e = list_begin(&frame_table);
+    for (size_t i = 0; i < index; i++) {
+        e = list_next(e);
+    }
+    return list_entry(e, struct frame, elem);
+}
 
-// void *frame_get_page(void *upage, struct thread *owner, bool zero) {
-//     // get a page from the allocated frame upage 
-//     ASSERT(owner != NULL);
-//     lock_acquire(&frame_table_lock);
+void
+advance_clock_hand(void) {
+    clock_hand = (clock_hand + 1) % list_size(&frame_table);
+}
 
-//     // Step 1: Allocate a physical frame
-//     void *kpage = frame_allocate(PAL_USER | (zero ? PAL_ZERO : 0));
-//     if (kpage == NULL) {
-//         // Eviction needed
-//         lock_release(&frame_table_lock);
-//         return NULL;
-//     }
+struct frame *
+frame_choose_victim(void) {
+    ASSERT(!list_empty(&frame_table));
+    printf("[frame_choose_victim] - Starting clock scan\n");
 
-//     // Step 2: Associate frame with this virtual page and thread
-//     struct frame *f = malloc(sizeof(struct frame));
-//     if (f == NULL) {
-//         frame_free(kpage);
-//         lock_release(&frame_table_lock);
-//         return NULL;
-//     }
-//     f->kpage = kpage;   // pointer to physical frame
-//     // f->spte = f;     // supplemental page table entry for this virtual page
-//     f->owner = owner;   // thread that owns this frame
-//     f->upage = upage;   // virtual page mapped to this frame
+    size_t n = list_size(&frame_table);
+    lock_acquire(&frame_table_lock);
 
+    while (true) {
+        struct frame *f = get_frame_at(clock_hand);
+        bool accessed = pagedir_is_accessed(f->owner->pagedir, f->upage);
 
-//     // Add the frame to the global frame table
-//     list_push_back(&frame_table, &f->elem);
-//     lock_release(&frame_table_lock);
+        if (accessed || f->pinned) {
+            // Give second chance
+            pagedir_set_accessed(f->owner->pagedir, f->upage, false);
+            advance_clock_hand();
+            clock_hand %= n;
+        } else {
+            struct frame *victim = f;
+            advance_clock_hand();
+            lock_release(&frame_table_lock);
 
-//     return f->kpage;
-// }
+            printf("[frame_choose_victim] - Victim: upage=%p\n", victim->upage);
+            return victim;
+        }
+    }
+}
+
+bool frame_evict(struct frame *victim) {
+    ASSERT(victim != NULL);
+    ASSERT(victim->spte != NULL);
+
+    struct spt_entry *spte = victim->spte;
+    struct thread *owner  = victim->owner;
+    void *upage           = victim->upage;
+    void *kpage           = victim->kpage;
+
+    printf("[frame_evict] - Evicting upage=%p\n", upage);
+
+    if (victim->pinned) {
+        printf("[frame_evict] - ABORT: frame is pinned\n");
+        return false;
+    }
+
+    bool dirty = pagedir_is_dirty(owner->pagedir, upage);
+
+    if (spte->file != NULL) {
+        if (dirty) {
+            printf("[frame_evict] - Writing dirty file page\n");
+            lock_acquire(&frame_table_lock);
+            file_write_at(spte->file, kpage, spte->read_bytes, spte->ofs);
+            lock_release(&frame_table_lock);
+        }
+        spte->loaded = false;
+        spte->frame  = NULL;
+    } else {
+        printf("[frame_evict] - Swapping out page\n");
+        // size_t slot = swap_out(kpage);
+        // spte->swap_slot = slot;
+        spte->loaded = false;
+        spte->frame  = NULL;
+    }
+
+    pagedir_clear_page(owner->pagedir, upage);
+
+    lock_acquire(&frame_table_lock);
+    list_remove(&victim->elem);
+    lock_release(&frame_table_lock);
+
+    palloc_free_page(kpage);
+    free(victim);
+
+    printf("[frame_evict] - Eviction complete\n");
+    return true;
+}
