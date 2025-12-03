@@ -93,6 +93,8 @@ static bool load_page(struct spt_entry *spte) {
     
     void *kpage = frame->kpage;
     
+    frame_pin(frame);
+
     // Determine where to load from
     if (spte->swap_slot != (size_t)-1) {
         // Load from swap
@@ -105,6 +107,7 @@ static bool load_page(struct spt_entry *spte) {
         int bytes_read = file_read(spte->file, kpage, spte->read_bytes);
         
         if (bytes_read != (int)spte->read_bytes) {
+            frame_unpin(frame);
             frame_free(frame);
             return false;
         }
@@ -119,6 +122,7 @@ static bool load_page(struct spt_entry *spte) {
 
     // Install page in page table
     if (!install_page(spte->upage, kpage, spte->writable)) {
+        frame_unpin(frame);
         frame_free(frame);
         return false;
     }
@@ -128,6 +132,8 @@ static bool load_page(struct spt_entry *spte) {
     frame->spte = spte;
     spte->loaded = true;
     
+    frame_unpin(frame);
+
     return true;
 }
 
@@ -201,28 +207,3 @@ static bool spt_less(const struct hash_elem *a, const struct hash_elem *b,
 void spt_init() {
     hash_init(&thread_current()->spt, spt_hash, spt_less, NULL);
 }
-
-// bool load_page(struct spt_entry *spte) {
-//     // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-//     //   {
-//     //     frame_free(kpage);
-//     //     //palloc_free_page (kpage);
-//     //     return false; 
-//     //   }
-
-//     struct frame* f = frame_get_page(spte->upage, thread_current(), false);
-
-//     frame_pin(f);
-
-//     // if spte.is_file_backed:
-//     //     read_from_file_into(f.kpage, spte.file, spte.offset)
-//     // else if spte.is_swapped:
-//     //     swap_in(f.kpage, spte.swap_slot)
-//     // install_page_mapping(f.owner, f.upage, f.kpage)
-
-//     spte->loaded = true;
-//     spte->frame = f;
-//     frame_unpin(f);
-
-//     return true;
-// }
