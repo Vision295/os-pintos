@@ -8,13 +8,14 @@
 
 extern struct list frame_table;
 extern struct lock frame_table_lock;
+extern size_t clock_hand;
 
 struct frame {
     void *kpage;            // kernel pool page
     void *upage;            // user pool page
     struct thread *owner; 
     bool pinned;            // for I/O 
-    // size_t swap_slot;       // if frame evicted, store swap slot index 
+    // size_t swap_slot;    // if frame evicted, store swap slot index 
     struct list_elem elem; 
     struct spt_entry *spte; 
 };
@@ -33,6 +34,8 @@ struct frame *frame_choose_victim(void);
 bool frame_evict(struct frame *victim);
 void frame_pin(struct frame *f);
 void frame_unpin(struct frame *f);
+struct frame* get_frame_at(size_t index);
+void advance_clock_hand(void);
 
 // Maybe not needed
 //struct frame *frame_lookup_kpage(void *kpage);
