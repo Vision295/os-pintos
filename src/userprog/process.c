@@ -389,6 +389,12 @@ static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+bool setup_spte(struct spt_entry *spte, void *upage, bool loaded, 
+                bool writable, struct file *file, off_t ofs, 
+                size_t page_read_bytes, size_t page_zero_bytes, 
+                size_t swap_slot, 
+                // struct hash_elem helem, 
+                struct frame *frame);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -565,6 +571,25 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
   return true;
 }
 
+bool setup_spte(struct spt_entry *spte, void *upage, bool loaded, 
+                bool writable, struct file *file, off_t ofs, 
+                size_t page_read_bytes, size_t page_zero_bytes, 
+                size_t swap_slot, 
+                //struct hash_elem helem, 
+                struct frame *frame) {
+    spte->upage = upage;
+    spte->loaded = loaded;
+    spte->writable = writable;
+    spte->file = file;
+    spte->ofs = ofs;
+    spte->read_bytes = page_read_bytes;
+    spte->zero_bytes = page_zero_bytes;
+    spte->swap_slot = swap_slot;
+    // spte->helem = helem;
+    spte->frame = frame;
+    return true;
+}
+
 /* Loads a segment starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
@@ -602,15 +627,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         return false;
       }
 
-      spte->upage = upage;
-      spte->loaded = false;
-      spte->writable = writable;
-      spte->file = file;
-      spte->ofs = ofs;
-      spte->read_bytes = page_read_bytes;
-      spte->zero_bytes = page_zero_bytes;
-      spte->swap_slot = -1;
-      spte->frame = NULL;
+      bool success = setup_spte(
+        spte, upage, false, writable, file, ofs, 
+        page_read_bytes, page_zero_bytes, -1, NULL);
       if(!spt_insert(&thread_current()->spt, spte)){
         free(spte);
         return false;
@@ -687,17 +706,7 @@ setup_stack (void **esp)
       return false;
     }
     
-    // Initialize SPT entry
-    spte->upage = upage;
-    spte->loaded = true;
-    spte->writable = true;
-    spte->file = NULL;
-    spte->ofs = 0;
-    spte->read_bytes = 0;
-    spte->zero_bytes = PGSIZE;
-    spte->swap_slot = (size_t)-1;  // No swap slot initially
-    spte->frame = frame;  // Link to the frame
-    
+    setup_spte(spte, upage, true, true, NULL, 0, 0, PGSIZE, (size_t)-1, frame);
     // Link frame to SPT entry
     frame->spte = spte;
     
