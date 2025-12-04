@@ -101,10 +101,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  // SPT
-  // #ifdef VM
-  // spt_init(&initial_thread->spt);
-  // #endif
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -517,8 +513,9 @@ init_thread (struct thread *t, const char *name, int priority)
   // DEBUG
   t->esp = PHYS_BASE; // initial user stack top
 
-  //hash_init(&t->spt_list, spt_hash, spt_less, NULL);
-
+  // MMAP
+  t->next_mapid = 1;
+  list_init(&t->mmap_list);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

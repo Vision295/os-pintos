@@ -19,7 +19,7 @@ size_t clock_hand;
 void frame_init(void){
     list_init(&frame_table);
     lock_init(&frame_table_lock);
-    printf("[frame_init] - Frame table initialized\n");
+    //printf("[frame_init] - Frame table initialized\n");
 }
 
 
@@ -91,7 +91,7 @@ void frame_pin(struct frame *f) {
     f->pinned = true;
     lock_release(&frame_table_lock);
 
-    printf("[frame_pin] - Pinned frame for upage=%p\n", f->upage);
+    //printf("[frame_pin] - Pinned frame for upage=%p\n", f->upage);
 }
 
 void frame_unpin(struct frame *f) {
@@ -101,19 +101,19 @@ void frame_unpin(struct frame *f) {
     f->pinned = false;
     lock_release(&frame_table_lock);
 
-    printf("[frame_unpin] - Unpinned frame for upage=%p\n", f->upage);
+    //printf("[frame_unpin] - Unpinned frame for upage=%p\n", f->upage);
 }
 
 bool frame_eviction(void) {
-    printf("[frame_eviction] - Choosing victim frame\n");
+    //printf("[frame_eviction] - Choosing victim frame\n");
 
     struct frame *victim = frame_choose_victim();
     if (victim == NULL) {
-        printf("[frame_eviction] - No victim found\n");
+        //printf("[frame_eviction] - No victim found\n");
         return false;
     }
 
-    printf("[frame_eviction] - Victim found, evicting...\n");
+    //printf("[frame_eviction] - Victim found, evicting...\n");
     return frame_evict(victim);
 }
 
@@ -134,7 +134,7 @@ advance_clock_hand(void) {
 struct frame *
 frame_choose_victim(void) {
     ASSERT(!list_empty(&frame_table));
-    printf("[frame_choose_victim] - Starting clock scan\n");
+    //printf("[frame_choose_victim] - Starting clock scan\n");
 
     size_t n = list_size(&frame_table);
     lock_acquire(&frame_table_lock);
@@ -153,7 +153,7 @@ frame_choose_victim(void) {
             advance_clock_hand();
             lock_release(&frame_table_lock);
 
-            printf("[frame_choose_victim] - Victim: upage=%p\n", victim->upage);
+            //printf("[frame_choose_victim] - Victim: upage=%p\n", victim->upage);
             return victim;
         }
     }
@@ -168,10 +168,10 @@ bool frame_evict(struct frame *victim) {
     void *upage           = victim->upage;
     void *kpage           = victim->kpage;
 
-    printf("[frame_evict] - Evicting upage=%p\n", upage);
+    //printf("[frame_evict] - Evicting upage=%p\n", upage);
 
     if (victim->pinned) {
-        printf("[frame_evict] - ABORT: frame is pinned\n");
+        //printf("[frame_evict] - ABORT: frame is pinned\n");
         return false;
     }
 
@@ -179,7 +179,7 @@ bool frame_evict(struct frame *victim) {
 
     if (spte->file != NULL) {
         if (dirty) {
-            printf("[frame_evict] - Writing dirty file page\n");
+            //printf("[frame_evict] - Writing dirty file page\n");
             lock_acquire(&frame_table_lock);
             file_write_at(spte->file, kpage, spte->read_bytes, spte->ofs);
             lock_release(&frame_table_lock);
@@ -187,7 +187,7 @@ bool frame_evict(struct frame *victim) {
         spte->loaded = false;
         spte->frame  = NULL;
     } else {
-        printf("[frame_evict] - Swapping out page\n");
+        //printf("[frame_evict] - Swapping out page\n");
         // size_t slot = swap_out(kpage);
         // spte->swap_slot = slot;
         spte->loaded = false;
@@ -203,6 +203,6 @@ bool frame_evict(struct frame *victim) {
     palloc_free_page(kpage);
     free(victim);
 
-    printf("[frame_evict] - Eviction complete\n");
+    //printf("[frame_evict] - Eviction complete\n");
     return true;
 }

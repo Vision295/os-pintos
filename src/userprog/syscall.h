@@ -15,5 +15,7 @@ int write(int fd, const void * buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+mapid_t mmap(int fd, void *addr);
+void munmap(mapid_t mapping);
 void syscall_init (void);
 #endif /* userprog/syscall.h */

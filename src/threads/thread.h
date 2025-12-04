@@ -16,10 +16,21 @@ enum thread_status
     THREAD_DYING        /* About to be destroyed. */
   };
 
+
+
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
 typedef tid_t pid_t;
+typedef int mapid_t;
+
+struct mmap_entry {
+    mapid_t id;            // unique mapping ID
+    struct file *file;     // pointer to the mapped file
+    void *addr;            // starting virtual address
+    size_t length;         // size of the mapping
+    struct list_elem elem; // for linking in thread's mmap list
+};
 
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
@@ -112,6 +123,8 @@ struct thread
    
     struct hash spt;  // Supplemental Page Table
    void *esp;
+   struct list mmap_list; // list of mmap_entry
+    mapid_t next_mapid;    // next ID to assign
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

@@ -166,6 +166,7 @@ page_fault (struct intr_frame *f)
    if(page_fault_handle(fault_addr, write, f)){
       return;
    }
+   exit(-1);
   }
 
 
