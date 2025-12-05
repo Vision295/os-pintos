@@ -6,11 +6,14 @@
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/page.h"
+#include "vm/frame.h"
 
 static void syscall_handler (struct intr_frame *);
 static void check_user_pointer (const void *uaddr);
@@ -264,6 +267,200 @@ close (int fd) {
   thread_current ()->fd_table[fd] = NULL;
 }
 
+static void mmap_cleanup(struct thread *t, struct mmap_entry *entry) {
+    void *last_page = entry->addr + ((entry->length + PGSIZE - 1) & ~(PGSIZE - 1));
+    void *page_addr = entry->addr;
+
+    while (page_addr < last_page) {
+        struct spt_entry *spte = spt_lookup(&t->spt, page_addr);
+        if (spte != NULL) {
+            // Write back if dirty
+            if (spte->frame != NULL && pagedir_is_dirty(t->pagedir, spte->upage)) {
+                file_seek(entry->file, spte->ofs);
+                file_write(entry->file, spte->frame->kpage, spte->read_bytes);
+            }
+
+            // Remove from SPT and free frame/spte
+            spt_remove(&t->spt, spte);
+            if (spte->frame != NULL)
+                frame_free(spte->frame);
+            free(spte);
+        }
+        page_addr += PGSIZE;
+    }
+
+    // Remove mmap_entry from list and close file
+    list_remove(&entry->elem);
+    file_close(entry->file);
+    free(entry);
+}
+
+
+
+
+mapid_t mmap(int fd, void *addr) {
+    if (fd < 2 || fd >= MAX_FD){
+      return -1; 
+    }
+    struct thread *t = thread_current();
+    struct file *file;
+    size_t file_size;
+    size_t ofs = 0;
+    mapid_t mapid;
+    
+    // 1. Validate input
+    if (addr == NULL || pg_ofs(addr) != 0) // not page-aligned
+    {
+      return -1;
+    }    
+    
+
+    lock_acquire(&filesys_lock);
+    
+    file = thread_current ()->fd_table[fd];
+    if (file == NULL)
+    {
+      return -1;
+    }    
+
+    file = file_reopen(file);  // Add after getting file from fd
+    if (file == NULL)
+    {
+      return -1;
+    }    
+
+    file_size = file_length(file);
+    if (file_size == 0){
+      file_close(file);
+      return -1;
+    }
+        
+    lock_release(&filesys_lock);
+    // 2. Check for overlap with existing SPT pages
+    size_t size_left = file_size;
+    void *page_addr = addr;
+    while (size_left > 0) {
+        if (spt_lookup(&t->spt, page_addr) != NULL){
+          file_close(file);    ;
+          return -1;
+        }
+        
+        page_addr += PGSIZE;
+        size_left = (size_left > PGSIZE) ? size_left - PGSIZE : 0;
+    }
+
+    // 3. Create a new mmap_entry
+    struct mmap_entry *entry = malloc(sizeof(struct mmap_entry));
+    if (entry == NULL)
+        return -1;
+
+    mapid = ++t->next_mapid;
+    entry->id = mapid;
+    entry->file = file;
+    entry->addr = addr;
+    entry->length = file_size;
+    list_push_back(&t->mmap_list, &entry->elem);
+    
+    // 4. Create SPT entries for each page
+    size_left = file_size;
+    page_addr = addr;
+    ofs = 0;
+
+    while (size_left > 0) {
+        struct spt_entry *spte = malloc(sizeof(struct spt_entry));
+        if (spte == NULL) {
+          mmap_cleanup(t, entry);
+          return -1;
+        }
+
+        size_t read_bytes = (size_left > PGSIZE) ? PGSIZE : size_left;
+        size_t zero_bytes = PGSIZE - read_bytes;
+
+        spte->upage = page_addr;
+        spte->loaded = false;
+        spte->writable = true;      // mmap is usually writable
+        spte->file = file;
+        spte->ofs = ofs;
+        spte->read_bytes = read_bytes;
+        spte->zero_bytes = zero_bytes;
+        spte->swap_slot = -1;
+        spte->frame = NULL;
+
+        if (!spt_insert(&t->spt, spte)) {
+          mmap_cleanup(t, entry);  
+            free(spte);
+            return -1;
+        }
+
+        page_addr += PGSIZE;
+        ofs += read_bytes;
+        size_left -= read_bytes;
+    }
+
+    // 5. Return the new mapping id
+    return mapid;
+}
+
+static struct mmap_entry *find_mmap_entry(struct thread *t, mapid_t mapid) {
+    struct list_elem *e;
+    
+    for (e = list_begin(&t->mmap_list); e != list_end(&t->mmap_list);
+         e = list_next(e)) {
+        struct mmap_entry *entry = list_entry(e, struct mmap_entry, elem);
+        if (entry->id == mapid)
+            return entry;
+    }
+    return NULL;
+}
+
+void munmap(mapid_t mapping) {
+    struct thread *t = thread_current();
+    struct mmap_entry *entry;
+    
+    entry = find_mmap_entry(t, mapping);
+    if (entry == NULL) {
+        return;
+    }
+    
+    void *page_addr = entry->addr;
+    size_t size_left = entry->length;
+    
+    while (size_left > 0) {
+        struct spt_entry *spte = spt_lookup(&t->spt, page_addr);
+        
+        if (spte != NULL) {
+            if (spte->loaded && spte->frame != NULL) {                
+                if (pagedir_is_dirty(t->pagedir, spte->upage)) {
+                    lock_acquire(&filesys_lock);
+                    file_seek(entry->file, spte->ofs);
+                    file_write(entry->file, spte->upage, spte->read_bytes);
+                    lock_release(&filesys_lock);
+                }
+                
+                frame_free(spte->frame);
+                pagedir_clear_page(t->pagedir, spte->upage);
+            }
+            
+            spt_remove(&t->spt, spte);
+            free(spte);
+        }
+        
+        page_addr += PGSIZE;
+        size_left = (size_left > PGSIZE) ? size_left - PGSIZE : 0;
+    }
+    
+    lock_acquire(&filesys_lock);
+    file_close(entry->file);
+    lock_release(&filesys_lock);
+    
+    list_remove(&entry->elem);
+    free(entry);
+}
+
+
+
+
+
 /* System call initialization. */
 void
 syscall_init (void) {
@@ -420,6 +617,20 @@ syscall_handler (struct intr_frame *f) {
       break;
     }
 
+    case SYS_MMAP: {
+      check_user_pointer_range(user_esp + 1, sizeof(int));
+      check_user_pointer_range(user_esp + 2, sizeof(void *));
+      int fd = *(int *)(user_esp + 1);
+      void *addr = *(void **)(user_esp + 2);
+      f->eax = mmap (fd, addr);
+      break;
+    }
+    case SYS_MUNMAP: {
+      check_user_pointer_range(user_esp + 1, sizeof(int));
+      mapid_t mapping = *(int *)(user_esp + 1);
+      munmap (mapping);
+      break;
+    }
     default:
       exit (-1);
       break;

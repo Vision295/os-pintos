@@ -15,13 +15,13 @@
 #define STACK_GROWTH_LIMIT 32
 
 bool spt_insert(struct hash *spt, struct spt_entry *sp) {
-    printf("[spt_insert] upage=%p\n", sp->upage);
+    //printf("[spt_insert] upage=%p\n", sp->upage);
     return hash_insert(spt, &sp->helem) == NULL;
 }
 
 
 struct spt_entry *spt_lookup(struct hash *spt, void *upage){
-    printf("[spt_lookup] upage=%p\n", upage);
+    //printf("[spt_lookup] upage=%p\n", upage);
     struct spt_entry sp;
     sp.upage = pg_round_down(upage);
     struct hash_elem *e = hash_find(spt, &sp.helem);
@@ -31,24 +31,24 @@ struct spt_entry *spt_lookup(struct hash *spt, void *upage){
 
 // Helper function to grow the stack
 static bool stack_grow(void *upage) {
-    printf("[stack_grow] upage=%p\n", upage);
+    //printf("[stack_grow] upage=%p\n", upage);
     struct thread *t = thread_current();
     
     struct frame *frame = frame_alloc(PAL_USER | PAL_ZERO, upage);
     if (frame == NULL) {
-        printf("[stack_grow] frame_alloc failed\n");
+        //printf("[stack_grow] frame_alloc failed\n");
         return false;
     }
     
     if (!install_page(upage, frame->kpage, true)) {
-        printf("[stack_grow] install_page failed\n");
+        //printf("[stack_grow] install_page failed\n");
         frame_free(frame);
         return false;
     }
     
     struct spt_entry *spte = malloc(sizeof(struct spt_entry));
     if (spte == NULL) {
-        printf("[stack_grow] malloc failed\n");
+        //printf("[stack_grow] malloc failed\n");
         pagedir_clear_page(t->pagedir, upage);
         frame_free(frame);
         return false;
@@ -66,7 +66,7 @@ static bool stack_grow(void *upage) {
     frame->spte = spte;
     
     if (!spt_insert(&t->spt, spte)) {
-        printf("[stack_grow] spt_insert failed\n");
+        //printf("[stack_grow] spt_insert failed\n");
         pagedir_clear_page(t->pagedir, upage);
         frame_free(frame);
         free(spte);
@@ -80,16 +80,16 @@ static bool stack_grow(void *upage) {
 
 // Helper function to load a page from SPT
 static bool load_page(struct spt_entry *spte) {
-    printf("[load_page] upage=%p\n", spte->upage);
+    //printf("[load_page] upage=%p\n", spte->upage);
 
     if (spte->loaded) {
-        printf("[load_page] already loaded\n");
+        //printf("[load_page] already loaded\n");
         return true;
     }
     
     struct frame *frame = frame_alloc(PAL_USER, spte->upage);
     if (frame == NULL) {
-        printf("[load_page] frame_alloc failed\n");
+        //printf("[load_page] frame_alloc failed\n");
         return false;
     }
     
@@ -101,12 +101,12 @@ static bool load_page(struct spt_entry *spte) {
         // spte->swap_slot = (size_t)-1;
     }
     else if (spte->file != NULL) {
-        printf("[load_page] loading from file ofs=%d\n", spte->ofs);
+        //printf("[load_page] loading from file ofs=%d\n", spte->ofs);
         file_seek(spte->file, spte->ofs);
         int bytes_read = file_read(spte->file, kpage, spte->read_bytes);
         
         if (bytes_read != (int)spte->read_bytes) {
-            printf("[load_page] file_read incomplete\n");
+            //printf("[load_page] file_read incomplete\n");
             frame_unpin(frame);
             frame_free(frame);
             return false;
@@ -119,7 +119,7 @@ static bool load_page(struct spt_entry *spte) {
     }
 
     if (!install_page(spte->upage, kpage, spte->writable)) {
-        printf("[load_page] install_page failed\n");
+        //printf("[load_page] install_page failed\n");
         frame_unpin(frame);
         frame_free(frame);
         return false;
@@ -135,19 +135,19 @@ static bool load_page(struct spt_entry *spte) {
 }
 
 bool page_fault_handle(void *fault_addr, bool write, struct intr_frame *f){
-    printf("[pf_handler] fault_addr=%p write=%d\n", fault_addr, write);
+    //printf("[pf_handler] fault_addr=%p write=%d\n", fault_addr, write);
 
     struct thread *t = thread_current();
     void *upage = pg_round_down(fault_addr);
 
     if (!is_user_vaddr(fault_addr) || fault_addr == NULL) {
-        printf("[pf_handler] invalid user address\n");
+        //printf("[pf_handler] invalid user address\n");
         return false;
     }
     
     struct spt_entry *spte = spt_lookup(&t->spt, upage);
     if (spte != NULL && write && !spte->writable) {
-        printf("[pf_handler] write to readonly page\n");
+        //printf("[pf_handler] write to readonly page\n");
         return false;
     }
     
@@ -157,15 +157,15 @@ bool page_fault_handle(void *fault_addr, bool write, struct intr_frame *f){
                            (PHYS_BASE - pg_round_down(fault_addr) <= MAX_STACK_SIZE);
     
     if (spte != NULL) {
-        printf("[pf_handler] loading existing SPT entry\n");
+        //printf("[pf_handler] loading existing SPT entry\n");
         return load_page(spte);
     }
     else if (is_stack_access) {
-        printf("[pf_handler] stack growth\n");
+        //printf("[pf_handler] stack growth\n");
         return stack_grow(upage);
     }
     else {
-        printf("[pf_handler] invalid access\n");
+        //printf("[pf_handler] invalid access\n");
         return false;
     }
 }
@@ -178,7 +178,7 @@ static void spt_destroy_func(struct hash_elem *e, void *aux UNUSED){
 }
 
 void spt_destroy(struct hash *spt){
-  printf("[spt_destroy]\n");
+  //printf("[spt_destroy]\n");
   hash_destroy(spt, spt_destroy_func);
 }
 
@@ -196,6 +196,11 @@ static bool spt_less(const struct hash_elem *a, const struct hash_elem *b,
 }
 
 void spt_init() {
-    printf("[spt_init]\n");
+    //printf("[spt_init]\n");
     hash_init(&thread_current()->spt, spt_hash, spt_less, NULL);
+}
+
+bool spt_remove(struct hash *spt, struct spt_entry *spte) {
+    struct hash_elem *e = hash_delete(spt, &spte->helem);
+    return e != NULL;
 }
