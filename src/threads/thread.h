@@ -112,10 +112,8 @@ struct thread
    
     struct hash spt;  // Supplemental Page Table
    void *esp;
-#ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
