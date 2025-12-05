@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static bool setup_stack (void **esp);
@@ -418,6 +419,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   // SPT
   spt_init();
+  swap_init();
 
   /* Open executable file. */
   file = filesys_open (file_name);
