@@ -8,6 +8,11 @@ struct swap_table {
     struct lock lock; 
 };
 
+extern struct swap_table* swap_table;
+
+
+
+
 void swap_init(void);
 size_t swap_out(void *kpage);
 void swap_in(void *kpage, size_t slot);
