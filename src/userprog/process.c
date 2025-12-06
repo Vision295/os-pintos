@@ -596,8 +596,16 @@ bool setup_spte(struct spt_entry *spte, void *upage, bool loaded,
     spte->upage = upage;
     spte->loaded = loaded;
     spte->writable = writable;
-    spte->file = file;
-    spte->ofs = ofs;
+    //spte->file = file;
+    //spte->ofs = ofs;
+    if (page_read_bytes > 0) {
+        spte->file = file;
+        spte->ofs = ofs;
+    } else {
+        // Pure zero page (BSS) - no file backing
+        spte->file = NULL;
+        spte->ofs = 0;
+    }
     spte->read_bytes = page_read_bytes;
     spte->zero_bytes = page_zero_bytes;
     spte->swap_slot = swap_slot;

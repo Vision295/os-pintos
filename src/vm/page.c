@@ -151,7 +151,7 @@ bool page_fault_handle(void *fault_addr, bool write, struct intr_frame *f){
     
     struct spt_entry *spte = spt_lookup(&t->spt, upage);
     if (spte != NULL && write && !spte->writable) {
-        //printf("[pf_handler] write to readonly page\n");
+       //printf("[pf_handler] write to readonly page\n");
         return false;
     }
     
@@ -173,13 +173,6 @@ bool page_fault_handle(void *fault_addr, bool write, struct intr_frame *f){
         return false;
     }
 }
-
-
-
-// static void spt_destroy_func(struct hash_elem *e, void *aux UNUSED){
-//   struct spt_entry *spte = hash_entry(e, struct spt_entry, helem);
-//   free(spte);
-// }
 
 static void spt_destroy_func(struct hash_elem *e, void *aux) {
     struct spt_entry *spte = hash_entry(e, struct spt_entry, helem);
@@ -217,14 +210,6 @@ void spt_destroy(struct hash *spt) {
     struct thread *t = thread_current();
     hash_destroy(spt, spt_destroy_func);
 }
-
-
-
-// void spt_destroy(struct hash *spt){
-//   //printf("[spt_destroy]\n");
-//   hash_destroy(spt, spt_destroy_func);
-// }
-
 
 static unsigned spt_hash(const struct hash_elem *e, void *aux UNUSED) {
     const struct spt_entry *sp = hash_entry(e, struct spt_entry, helem);
