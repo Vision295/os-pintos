@@ -52,3 +52,5 @@ src/vm/*
 !src/vm/page.c
 !src/vm/swap.h
 !src/vm/swap.c
+
+!src/Makefile.build
