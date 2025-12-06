@@ -22,7 +22,6 @@ void frame_init(void){
     //printf("[frame_init] - Frame table initialized\n");
 }
 
-
 // Allocate a frame with eviction support
 // Returns frame pointer or NULL if allocation fails
 struct frame *frame_alloc(enum palloc_flags flags, void *upage) {

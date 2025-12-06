@@ -26,8 +26,7 @@ void frame_init(void);
 struct frame *frame_alloc(enum palloc_flags flags, void *upage);
 
 void frame_free(struct frame *frame);
-
-//void *frame_get_page(void *upage, struct thread *owner, bool zero);
+void *frame_get_page(void *upage, struct thread *owner, bool zero);
 
 
 // Eviction
