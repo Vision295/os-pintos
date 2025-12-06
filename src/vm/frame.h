@@ -21,12 +21,11 @@ struct frame {
 };
 
 void frame_init(void);
-//void *frame_allocate(enum palloc_flags flags);
 
 struct frame *frame_alloc(enum palloc_flags flags, void *upage);
 
 void frame_free(struct frame *frame);
-void *frame_get_page(void *upage, struct thread *owner, bool zero);
+struct frame *frame_get_page(void *upage, struct thread *owner, bool zero);
 
 
 // Eviction

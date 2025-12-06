@@ -32,5 +32,8 @@ struct spt_entry *spt_lookup(struct hash *spt, void *upage);
 bool page_fault_handle(void *fault_addr, bool write, struct intr_frame *f);
 void spt_destroy(struct hash *spt);
 bool spt_remove(struct hash *spt, struct spt_entry *spte);
+bool stack_grow(void *upage);
+bool load_page(struct spt_entry *spte); 
+bool is_valid_stack_access(void *fault_addr, void *esp);
 
 #endif /* vm/page.h */

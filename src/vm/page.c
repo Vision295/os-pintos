@@ -30,7 +30,7 @@ struct spt_entry *spt_lookup(struct hash *spt, void *upage){
 
 
 // Helper function to grow the stack
-static bool stack_grow(void *upage) {
+bool stack_grow(void *upage) {
     //printf("[stack_grow] upage=%p\n", upage);
     struct thread *t = thread_current();
     
@@ -79,7 +79,7 @@ static bool stack_grow(void *upage) {
 
 
 // Helper function to load a page from SPT
-static bool load_page(struct spt_entry *spte) {
+bool load_page(struct spt_entry *spte) {
     //printf("[load_page] upage=%p\n", spte->upage);
 
     if (spte->loaded) {
@@ -203,4 +203,25 @@ void spt_init() {
 bool spt_remove(struct hash *spt, struct spt_entry *spte) {
     struct hash_elem *e = hash_delete(spt, &spte->helem);
     return e != NULL;
+}
+
+bool is_valid_stack_access(void *fault_addr, void *esp)
+{
+  /* Stack growth conditions:
+     1. Must be in user address space
+     2. Must be within 32 bytes below esp (accounts for PUSHA instruction)
+     3. Must not exceed maximum stack size (e.g., 8MB below PHYS_BASE) */
+  
+  if (!is_user_vaddr(fault_addr))
+    return false;
+  
+  /* Check if access is within valid stack range (esp - 32 bytes) */
+  if (fault_addr < esp - 32)
+    return false;
+  
+  /* Check maximum stack size (typically 8MB) */
+  if (PHYS_BASE - pg_round_down(fault_addr) > MAX_STACK_SIZE)
+    return false;
+  
+  return true;
 }
