@@ -123,6 +123,7 @@ struct thread
    
     struct hash spt;  // Supplemental Page Table
     void *esp;
+    void *saved_esp;
     struct list mmap_list; // list of mmap_entry
     mapid_t next_mapid;    // next ID to assign
 // #ifdef USERPROG

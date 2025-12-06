@@ -1,7 +1,8 @@
 #include <stdlib.h>
-#include "userprog/exception.h"
-#include <inttypes.h>
 #include <stdio.h>
+#include <inttypes.h>
+
+#include "userprog/exception.h"
 #include "userprog/gdt.h"
 #include "userprog/process.h"
 #include "userprog/syscall.h"
@@ -196,8 +197,8 @@ page_fault (struct intr_frame *f)
       step 4 - point the table entry to the physical frame it has been allocated to
    */
 
-   frame_get_page(fault_addr, thread_current(), false);
-   pagedir_set_page(thread_current()->pagedir, fault_addr, frame_get_page(fault_addr, thread_current(), false), true);
+   // frame_get_page(fault_addr, thread_current(), false);
+   // pagedir_set_page(thread_current()->pagedir, fault_addr, frame_get_page(fault_addr, thread_current(), false), true);
    
   kill (f);
 }
