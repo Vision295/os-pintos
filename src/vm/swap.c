@@ -93,3 +93,7 @@ void swap_in(void *kpage, size_t slot) {
     bitmap_set(swap_table->used_slots, slot, false);
     lock_release(&swap_table->lock);
 }
+
+void swap_free(size_t slot) {
+    bitmap_reset(swap_table->used_slots, slot);
+}

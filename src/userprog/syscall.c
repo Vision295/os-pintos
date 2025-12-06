@@ -15,11 +15,12 @@
 #include "vm/page.h"
 #include "vm/frame.h"
 
+
+#define MAX_STACK_SIZE (8 * 1024 * 1024)
 static void syscall_handler (struct intr_frame *);
 static void check_user_pointer (const void *uaddr);
 
 struct lock filesys_lock;
-
 /* Validate that a user pointer is in user space and mapped.
    If not, terminate the process. */
 static void
@@ -35,28 +36,64 @@ check_user_pointer (const void *uaddr) {
    If not, terminate the process. */
 static void
 check_user_pointer_range(const void *uaddr, size_t size) { 
-    struct thread *t = thread_current();
+    //struct thread *t = thread_current();
     
     // Handle empty buffer case
     if (size == 0) return;
     
-    const void *start = uaddr;
-    const void *end = (const char *)uaddr + size - 1;
+    //const void *start = uaddr;
+    //const void *end = (const char *)uaddr + size - 1;
     // NULL check and verify both start and end are in user space
-    if (start == NULL || !is_user_vaddr(start) || !is_user_vaddr(end)) exit(-1);
-
-    // Iterate over pages within the range
-    const void *current_ptr = pg_round_down(start); // Start at page boundary
-    const void *end_page = pg_round_down(end);       // End page boundary
+    //if (start == NULL || !is_user_vaddr(start) || !is_user_vaddr(end)) exit(-1);
+    if (uaddr == NULL || 
+        !is_user_vaddr(uaddr) || 
+        !is_user_vaddr((const char *)uaddr + size - 1)) {
+        exit(-1);
+    }
+    // // Iterate over pages within the range
+    // const void *current_ptr = pg_round_down(start); // Start at page boundary
+    // const void *end_page = pg_round_down(end);       // End page boundary
     
-    while (current_ptr <= end_page) {
-        // Check if the page is mapped in the process's page directory
-        if (pagedir_get_page(t->pagedir, current_ptr) == NULL) exit(-1);
+    // while (current_ptr <= end_page) {
+    //     // Check if the page is mapped in the process's page directory
+    //     if (pagedir_get_page(t->pagedir, current_ptr) == NULL) exit(-1);
         
-        // Move to the next page
-        current_ptr = (const char *)current_ptr + PGSIZE;
+    //     // Move to the next page
+    //     current_ptr = (const char *)current_ptr + PGSIZE;
+    // }
+    // ADD THIS: Load all pages in the range
+    struct thread *t = thread_current();
+    const void *page = pg_round_down(uaddr);
+    const void *end = pg_round_down((const char *)uaddr + size - 1);
+    
+    while (page <= end) {
+        struct spt_entry *spte = spt_lookup(&t->spt, (void *)page);
+        
+        if (spte != NULL && !spte->loaded) {
+            // Load the page NOW before kernel accesses it
+            if (!load_page(spte)) {  // Your load_page function
+                exit(-1);
+            }
+        } else if (spte == NULL) {
+            // Could be stack - check if valid stack access
+            //void *esp = t->user_esp;  // Use saved user ESP!
+            printf("Need to grow stack\n");
+            // if (page >= esp - STACK_GROWTH_LIMIT && 
+            //     PHYS_BASE - page <= MAX_STACK_SIZE) {
+            //     if (!stack_grow((void *)page)) {
+            //         exit(-1);
+            //     }
+            // } else {
+            //     exit(-1);  // Invalid access
+            // }
+        }
+        // If spte is NULL, it might be stack - let page fault handle it
+        // Or you could call stack_grow here like the working code
+        
+        page = (const char *)page + PGSIZE;
     }
 }
+
 
 /* Validate that a user string is in user space and mapped.
    If not, terminate the process. */
@@ -166,6 +203,7 @@ open (const char *file) {
 
   // Get safely the next available file descriptor
   int fd = thread_get_fd ();
+  //printf("[syscall] open('%s') = %d\n", file, fd);
   if (fd == -1) {
     file_close (f);
     return -1;
@@ -225,8 +263,10 @@ write (int fd, const void *buffer, unsigned size) {
   } else if (fd > 1 && fd < MAX_FD) {
     // Write to file
     struct file *f = thread_current ()->fd_table[fd];
-    if (f)
+    if (f){
       bytes_written = file_write (f, buffer, size);
+    }
+      
   }
 
   lock_release (&filesys_lock);
@@ -573,7 +613,12 @@ syscall_handler (struct intr_frame *f) {
       unsigned size = *(unsigned *)(user_esp + 3);
       
       /* The read() function will validate the buffer */
-      f->eax = read (fd, buffer, size);
+      //printf("[syscall] read(fd=%d, buffer=%p, size=%u)\n", fd, buffer, size);
+      
+      //f->eax = read (fd, buffer, size);
+      int result = read (fd, buffer, size);
+      f->eax = result;
+      //printf("[syscall] read() returned %d\n", result);
       break;
     }
 

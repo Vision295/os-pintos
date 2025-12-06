@@ -9,6 +9,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 
 #include "filesys/directory.h"
 #include "filesys/file.h"
@@ -278,6 +279,12 @@ process_exit (void)
     cur->child_info->has_exited = true;
     sema_up (&cur->child_info->wait_sema);
   }
+
+  while(!list_empty(&cur->mmap_list)){
+    struct list_elem *e = list_front(&cur->mmap_list);
+    struct mmap_entry *entry = list_entry(e, struct mmap_entry, elem);
+    munmap(entry->id);
+  } 
   
   // Close all open instances of files (described by file descriptors)
   for (int fd = 2; fd < MAX_FD; fd++){
@@ -293,6 +300,8 @@ process_exit (void)
     file_close(cur->executable);
     cur->executable = NULL;
   }
+
+  spt_destroy(&cur->spt);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -424,7 +433,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   // SPT
   spt_init();
-  swap_init();
+  //swap_init();
 
   /* Open executable file. */
   file = filesys_open (file_name);

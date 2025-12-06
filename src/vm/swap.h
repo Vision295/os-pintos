@@ -16,7 +16,7 @@ void swap_init(void);
 size_t swap_out(void *kpage);
 void swap_in(void *kpage, size_t slot);
 int get_sectors_per_page(void);
-
+void swap_free(size_t slot);
 
 
 #endif /* vm/swap.h */

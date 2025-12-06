@@ -15,10 +15,11 @@
 struct list frame_table;
 struct lock frame_table_lock;
 size_t clock_hand;
-
+struct list_elem *clock_hand_elem = NULL;
 void frame_init(void){
     list_init(&frame_table);
     lock_init(&frame_table_lock);
+    clock_hand_elem = NULL;
     //printf("[frame_init] - Frame table initialized\n");
 }
 
@@ -38,6 +39,7 @@ struct frame *frame_alloc(enum palloc_flags flags, void *upage) {
     // If allocation failed, try eviction once
     if (kpage == NULL) {
         lock_release(&frame_table_lock);
+        //printf("DEBUG: evicting\n");
         frame_eviction();
         lock_acquire(&frame_table_lock);
         
@@ -70,18 +72,37 @@ struct frame *frame_alloc(enum palloc_flags flags, void *upage) {
     return f;
 }
 
-// Free a frame by frame pointer
+// // Free a frame by frame pointer
+// void frame_free(struct frame *frame) {
+//     ASSERT(frame != NULL);
+
+//     lock_acquire(&frame_table_lock);
+//     list_remove(&frame->elem);
+//     lock_release(&frame_table_lock);
+
+//     palloc_free_page(frame->kpage);
+//     free(frame);
+// }
+
 void frame_free(struct frame *frame) {
     ASSERT(frame != NULL);
 
     lock_acquire(&frame_table_lock);
-    list_remove(&frame->elem);
+
+    struct list_elem *elem = &frame->elem;
+    if (clock_hand_elem == elem) {
+        clock_hand_elem = list_next(elem);
+        if (clock_hand_elem == list_end(&frame_table)) {
+            clock_hand_elem = list_begin(&frame_table);
+        }
+    }
+
+    list_remove(elem);
     lock_release(&frame_table_lock);
 
     palloc_free_page(frame->kpage);
     free(frame);
 }
-
 
 void frame_pin(struct frame *f) {
     ASSERT(f != NULL);
@@ -130,34 +151,76 @@ advance_clock_hand(void) {
     clock_hand = (clock_hand + 1) % list_size(&frame_table);
 }
 
-struct frame *
-frame_choose_victim(void) {
-    ASSERT(!list_empty(&frame_table));
-    //printf("[frame_choose_victim] - Starting clock scan\n");
+// struct frame *
+// frame_choose_victim(void) {
+//     ASSERT(!list_empty(&frame_table));
+//     //printf("[frame_choose_victim] - Starting clock scan\n");
 
-    size_t n = list_size(&frame_table);
+//     size_t n = list_size(&frame_table);
+//     lock_acquire(&frame_table_lock);
+
+//     while (true) {
+//         struct frame *f = get_frame_at(clock_hand);
+//         bool accessed = pagedir_is_accessed(f->owner->pagedir, f->upage);
+
+//         if (accessed || f->pinned) {
+//             // Give second chance
+//             pagedir_set_accessed(f->owner->pagedir, f->upage, false);
+//             advance_clock_hand();
+//             clock_hand %= n;
+//         } else {
+//             struct frame *victim = f;
+//             advance_clock_hand();
+//             lock_release(&frame_table_lock);
+
+//             //printf("[frame_choose_victim] - Victim: upage=%p\n", victim->upage);
+//             return victim;
+//         }
+//     }
+// }
+
+struct frame *frame_choose_victim(void) {
+    ASSERT(!list_empty(&frame_table));
+
     lock_acquire(&frame_table_lock);
 
+    if (clock_hand_elem == NULL) {
+        clock_hand_elem = list_begin(&frame_table);
+    }
+
+    struct list_elem *start = clock_hand_elem;
+    bool looped = false;
+
     while (true) {
-        struct frame *f = get_frame_at(clock_hand);
+        struct frame *f = list_entry(clock_hand_elem, struct frame, elem);
         bool accessed = pagedir_is_accessed(f->owner->pagedir, f->upage);
 
         if (accessed || f->pinned) {
-            // Give second chance
             pagedir_set_accessed(f->owner->pagedir, f->upage, false);
-            advance_clock_hand();
-            clock_hand %= n;
         } else {
-            struct frame *victim = f;
-            advance_clock_hand();
+            struct list_elem *next = list_next(clock_hand_elem);
+            if (next == list_end(&frame_table)) {
+                next = list_begin(&frame_table);
+            }
+            clock_hand_elem = next;
             lock_release(&frame_table_lock);
+            return f;
+        }
 
-            //printf("[frame_choose_victim] - Victim: upage=%p\n", victim->upage);
-            return victim;
+        clock_hand_elem = list_next(clock_hand_elem);
+        if (clock_hand_elem == list_end(&frame_table)) {
+            clock_hand_elem = list_begin(&frame_table);
+        }
+
+        if (clock_hand_elem == start) {
+            if (looped) {
+                lock_release(&frame_table_lock);
+                return NULL;  // Scanned twice, no victim
+            }
+            looped = true;
         }
     }
 }
-
 bool frame_evict(struct frame *victim) {
     ASSERT(victim != NULL);
     ASSERT(victim->spte != NULL);
@@ -187,8 +250,8 @@ bool frame_evict(struct frame *victim) {
         spte->frame  = NULL;
     } else {
         //printf("[frame_evict] - Swapping out page\n");
-        // size_t slot = swap_out(kpage);
-        // spte->swap_slot = slot;
+        size_t slot = swap_out(kpage);
+        spte->swap_slot = slot;
         spte->loaded = false;
         spte->frame  = NULL;
     }

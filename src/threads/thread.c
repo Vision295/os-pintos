@@ -294,7 +294,7 @@ thread_exit (void)
   intr_disable ();
   struct thread *cur = thread_current();
   list_remove (&thread_current()->allelem);
-  spt_destroy(&cur->spt);
+  //spt_destroy(&cur->spt);
   thread_current ()->status = THREAD_DYING;
 
   schedule ();

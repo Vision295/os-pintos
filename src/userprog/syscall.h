@@ -2,6 +2,7 @@
 #define USERPROG_SYSCALL_H
 #include <stdbool.h>
 #include "threads/thread.h"
+extern struct lock filesys_lock;
 void halt(void);
 void exit(int status);
 pid_t exec(const char *cmd_line);
