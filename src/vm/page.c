@@ -21,7 +21,6 @@ bool spt_insert(struct hash *spt, struct spt_entry *sp) {
     return hash_insert(spt, &sp->helem) == NULL;
 }
 
-
 struct spt_entry *spt_lookup(struct hash *spt, void *upage){
     //printf("[spt_lookup] upage=%p\n", upage);
     struct spt_entry sp;
@@ -29,7 +28,6 @@ struct spt_entry *spt_lookup(struct hash *spt, void *upage){
     struct hash_elem *e = hash_find(spt, &sp.helem);
     return e != NULL ? hash_entry(e, struct spt_entry, helem) : NULL;
 }
-
 
 // Helper function to grow the stack
 bool stack_grow(void *upage) {
@@ -77,8 +75,6 @@ bool stack_grow(void *upage) {
     
     return true;
 }
-
-
 
 // Helper function to load a page from SPT
 bool load_page(struct spt_entry *spte) {

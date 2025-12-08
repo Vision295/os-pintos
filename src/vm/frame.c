@@ -15,6 +15,7 @@
 struct list frame_table;
 struct lock frame_table_lock;
 size_t clock_hand;
+
 void frame_init(void){
     list_init(&frame_table);
     lock_init(&frame_table_lock);
