@@ -7,7 +7,8 @@
 #include "threads/palloc.h" 
 #include "filesys/off_t.h"
 #include "threads/interrupt.h"
-
+#define MAX_STACK_SIZE (8 * 1024 * 1024)
+#define STACK_GROWTH_LIMIT 32
 struct frame;
 struct file;
 

@@ -57,17 +57,18 @@ check_user_pointer_range(const void *uaddr, size_t size) {
             }
         } else if (spte == NULL) {
             // Could be stack - check if valid stack access
-            //void *esp = t->user_esp;  // Use saved user ESP!
+            void *esp = t->esp;  // Use saved user ESP!
             // TODO
-            printf("Need to grow stack\n");
-            // if (page >= esp - STACK_GROWTH_LIMIT && 
-            //     PHYS_BASE - page <= MAX_STACK_SIZE) {
-            //     if (!stack_grow((void *)page)) {
-            //         exit(-1);
-            //     }
-            // } else {
-            //     exit(-1);  // Invalid access
-            // }
+            //printf("Need to grow stack\n");
+            
+            if (page >= esp - STACK_GROWTH_LIMIT && 
+                 PHYS_BASE - page <= MAX_STACK_SIZE) {
+                 if (!stack_grow((void *)page)) {
+                     exit(-1);
+                 }
+             } else {
+                 exit(-1);  // Invalid access
+            }
 
 
         }

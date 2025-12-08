@@ -13,8 +13,7 @@
 #include "vm/frame.h"
 #include "vm/swap.h"
 
-#define MAX_STACK_SIZE (8 * 1024 * 1024)
-#define STACK_GROWTH_LIMIT 32
+
 
 bool spt_insert(struct hash *spt, struct spt_entry *sp) {
     //printf("[spt_insert] upage=%p\n", sp->upage);
