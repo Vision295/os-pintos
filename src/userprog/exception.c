@@ -144,29 +144,29 @@ page_fault (struct intr_frame *f)
      See [IA32-v2a] "MOV--Move to/from Control Registers" and
      [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
      (#PF)". */
-  asm ("movl %%cr2, %0" : "=r" (fault_addr));
+   asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
-  /* Turn interrupts back on (they were only off so that we could
-     be assured of reading CR2 before it changed). */
-  intr_enable ();
+   /* Turn interrupts back on (they were only off so that we could
+      be assured of reading CR2 before it changed). */
+   intr_enable ();
 
-  /* Count page faults. */
-  page_fault_cnt++;
+   /* Count page faults. */
+   page_fault_cnt++;
 
-  /* Determine cause. */
-  not_present = (f->error_code & PF_P) == 0;
-  write = (f->error_code & PF_W) != 0;
-  user = (f->error_code & PF_U) != 0;
+   /* Determine cause. */
+   not_present = (f->error_code & PF_P) == 0;
+   write = (f->error_code & PF_W) != 0;
+   user = (f->error_code & PF_U) != 0;
 
-  if (user && (fault_addr == NULL || !is_user_vaddr(fault_addr))) {
-      exit(-1);
-  }
-  if(user){
-      if(page_fault_handle(fault_addr, write, not_present, f)){
-         return;
-      }
-      exit(-1);
-  }
+   if (user && (fault_addr == NULL || !is_user_vaddr(fault_addr))) {
+         exit(-1);
+   }
+   if(user){
+         if(page_fault_handle(fault_addr, write, not_present, f)){
+            return;
+         }
+         exit(-1);
+   }
 //   if(not_present && user){
 //    if(page_fault_handle(fault_addr, write, f)){
 //       return;

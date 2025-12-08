@@ -209,33 +209,11 @@ struct frame *frame_get_page(void *upage, struct thread *owner, bool zero) {
     ASSERT(owner != NULL);
     // printf("[frame_get_page] - Getting frame for upage=%p\n", upage);
 
-    lock_acquire(&frame_table_lock);
-
-    void *kpage = frame_alloc(PAL_USER | (zero ? PAL_ZERO : 0), upage);
-    if (kpage == NULL) {
-        // printf("[frame_get_page] - Allocation failed, attempting eviction\n");
-        frame_eviction();
-        lock_release(&frame_table_lock);
-        return NULL;
-    }
-
-    struct frame *f = malloc(sizeof(struct frame));
+    struct frame *f = frame_alloc(PAL_USER | (zero ? PAL_ZERO : 0), upage);
     if (f == NULL) {
-        // printf("[frame_get_page] - malloc failed\n");
-        frame_free(kpage);
-        lock_release(&frame_table_lock);
+        // printf("[frame_get_page] - Allocation failed, attempting eviction\n");
         return NULL;
     }
-
-    f->kpage = kpage;
-    f->upage = upage;
-    f->owner = owner;
-    f->pinned = false;
-    f->spte = spt_lookup(&owner->spt, upage);
-
-    list_push_back(&frame_table, &f->elem);
-    lock_release(&frame_table_lock);
-
     // printf("[frame_get_page] - Mapped upage=%p to kpage=%p\n", upage, kpage);
     return f->kpage;
 }
