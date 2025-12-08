@@ -158,37 +158,21 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-//   if (user && (fault_addr == NULL || !is_user_vaddr(fault_addr))) {
-//    exit(-1);
-//   }
-
-//   if(user){
+  if (user && (fault_addr == NULL || !is_user_vaddr(fault_addr))) {
+      exit(-1);
+  }
+  if(user){
+      if(page_fault_handle(fault_addr, write, not_present, f)){
+         return;
+      }
+      exit(-1);
+  }
+//   if(not_present && user){
 //    if(page_fault_handle(fault_addr, write, f)){
 //       return;
 //    }
 //    exit(-1);
 //   }
-
-  /* 1 — Kernel mode fault with non-present page → kill kernel */
-    if (!user) {
-        // Should only allow kernel ESP adjustment case
-        kill(f);
-    }
-
-    /* 2 — Rights violation (present page + write attempt on RO) → kill */
-    if (!not_present) {
-        exit(-1);
-    }
-
-    /* 3 — Invalid user address */
-    if (fault_addr == NULL || !is_user_vaddr(fault_addr) || fault_addr >= PHYS_BASE) {
-        exit(-1);
-    }
-
-    /* 4 — Try supplemental page table handler */
-    if (page_fault_handle(fault_addr, write, f)) {
-        return;
-    }
 
     /* 5 — Fail if handler couldn’t resolve */
     exit(-1);

@@ -13,8 +13,7 @@
 #include "vm/frame.h"
 #include "vm/swap.h"
 
-#define MAX_STACK_SIZE (8 * 1024 * 1024)
-#define STACK_GROWTH_LIMIT 32
+
 
 bool spt_insert(struct hash *spt, struct spt_entry *sp) {
     //printf("[spt_insert] upage=%p\n", sp->upage);
@@ -133,10 +132,13 @@ bool load_page(struct spt_entry *spte) {
     return true;
 }
 
-bool page_fault_handle(void *fault_addr, bool write, struct intr_frame *f){
+bool page_fault_handle(void *fault_addr, bool write, bool not_present, struct intr_frame *f){
     //printf("[pf_handler] fault_addr=%p write=%d\n", fault_addr, write);
     //printf("[pf_handler] fault_addr=%p write=%d esp=%p\n", fault_addr, write, f->esp);
 
+    if(!not_present && write){
+        return false;
+    }
     struct thread *t = thread_current();
     void *upage = pg_round_down(fault_addr);
 

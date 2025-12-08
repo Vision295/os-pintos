@@ -21,6 +21,9 @@ static void syscall_handler (struct intr_frame *);
 static void check_user_pointer (const void *uaddr);
 
 struct lock filesys_lock;
+
+
+
 /* Validate that a user pointer is in user space and mapped.
    If not, terminate the process. */
 static void
@@ -56,23 +59,51 @@ check_user_pointer_range(const void *uaddr, size_t size) {
                 exit(-1);
             }
         } else if (spte == NULL) {
-            // Could be stack - check if valid stack access
-            //void *esp = t->user_esp;  // Use saved user ESP!
-            // TODO
-            printf("Need to grow stack\n");
-            // if (page >= esp - STACK_GROWTH_LIMIT && 
-            //     PHYS_BASE - page <= MAX_STACK_SIZE) {
-            //     if (!stack_grow((void *)page)) {
-            //         exit(-1);
-            //     }
-            // } else {
-            //     exit(-1);  // Invalid access
-            // }
+            void *esp = t->esp;
+            if (page >= esp - STACK_GROWTH_LIMIT && 
+                 PHYS_BASE - page <= MAX_STACK_SIZE) {
+                 if (!stack_grow((void *)page)) {
+                     exit(-1);
+                 }
+             } else {
+                 exit(-1);  // Invalid access
+            }
 
 
         }
         // If spte is NULL, it might be stack - let page fault handle it
         // Or you could call stack_grow here like the working code
+        
+        page = (const char *)page + PGSIZE;
+    }
+}
+
+/* Check if a buffer is writable (for syscalls that write to user memory) */
+static void
+check_user_buffer_writable(void *buffer, size_t size) {
+    if (size == 0) return;
+    
+    // First ensure the buffer is valid and loaded
+    check_user_pointer_range(buffer, size);
+    
+    struct thread *t = thread_current();
+    const void *page = pg_round_down(buffer);
+    const void *end = pg_round_down((char *)buffer + size - 1);
+    
+    // Check each page is writable
+    while (page <= end) {
+        struct spt_entry *spte = spt_lookup(&t->spt, (void *)page);
+        
+        // If SPT entry exists, check its writable flag
+        if (spte != NULL && !spte->writable) {
+            exit(-1);  // Trying to write to read-only page
+        }
+        
+        // If no SPT entry but page is loaded (e.g., code segment loaded at startup),
+        // it's likely read-only. Reject the write.
+        if (spte == NULL && pagedir_get_page(t->pagedir, page) != NULL) {
+            exit(-1);  // Page exists without SPT entry - assume read-only
+        }
         
         page = (const char *)page + PGSIZE;
     }
@@ -597,7 +628,7 @@ syscall_handler (struct intr_frame *f) {
       
       /* The read() function will validate the buffer */
       //printf("[syscall] read(fd=%d, buffer=%p, size=%u)\n", fd, buffer, size);
-      
+      check_user_buffer_writable(buffer, size);
       //f->eax = read (fd, buffer, size);
       int result = read (fd, buffer, size);
       f->eax = result;
