@@ -10,90 +10,85 @@
 #include "threads/malloc.h"
 
 
-struct swap_table* swap_table;
+static struct block *swap_block;
+static struct bitmap *swap_bitmap;
+static struct lock swap_lock;
 
-int get_sectors_per_page() {
-    return PGSIZE / BLOCK_SECTOR_SIZE;
+static size_t SECTORS_PER_PAGE;
+
+/* Initialize swap system */
+void swap_init(void) {
+    swap_block = block_get_role(BLOCK_SWAP);
+    if (swap_block == NULL)
+        PANIC("No swap block!");
+
+    SECTORS_PER_PAGE = PGSIZE / BLOCK_SECTOR_SIZE;
+
+    size_t swap_size = block_size(swap_block);
+    size_t slot_count = swap_size / SECTORS_PER_PAGE;
+
+    swap_bitmap = bitmap_create(slot_count);
+    if (swap_bitmap == NULL)
+        PANIC("Could not create swap bitmap");
+
+    bitmap_set_all(swap_bitmap, false);
+
+    lock_init(&swap_lock);
 }
 
-void swap_init(void)  {
-    // printf("[swap_init] - Initializing swap space\n");
-
-    swap_table = malloc(sizeof(struct swap_table));
-    if (swap_table == NULL) 
-        PANIC("Failed to allocate swap table");
-
-    swap_table->swap_block = block_get_role(BLOCK_SWAP);
-    ASSERT(swap_table->swap_block != NULL);
-
-    // Each page requires PAGE_SIZE / BLOCK_SECTOR_SIZE sectors
-    int sectors_per_page = get_sectors_per_page();
-    swap_table->total_slots = block_size(swap_table->swap_block) / sectors_per_page;
-
-    // Create bitmap marking all slots free
-    swap_table->used_slots = bitmap_create(swap_table->total_slots);
-    bitmap_set_all(swap_table->used_slots, false);
-    lock_init(&swap_table->lock);
-}
-
+/* Swap out a page -> returns slot index */
 size_t swap_out(void *kpage) {
-    // check page alignement
     ASSERT(pg_ofs(kpage) == 0);
-    ASSERT(swap_table != NULL);
-    
-    // printf("[swap_out] - Swapping out kpage=%p\n", kpage);
+    ASSERT(swap_bitmap != NULL);
+    ASSERT(swap_block != NULL);
 
-    lock_acquire(&swap_table->lock);
+    lock_acquire(&swap_lock);
 
-    // Find free slot in bitmap
-    size_t slot = bitmap_scan_and_flip(swap_table->used_slots,
-                                0, 1, false);
-
-    // if slot already in use
+    size_t slot = bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
     if (slot == BITMAP_ERROR) {
-        lock_release(&swap_table->lock);
-        PANIC("Swap full!");
+        lock_release(&swap_lock);
+        PANIC("SWAP FULL");
     }
 
-    ASSERT(bitmap_test(swap_table->used_slots, slot));
+    size_t base_sector = slot * SECTORS_PER_PAGE;
+    uint8_t *buf = (uint8_t *) kpage;
 
-    // Write page into multiple sectors
-    size_t base_sector = slot * (size_t)get_sectors_per_page();
-    uint8_t* buf = (uint8_t*) kpage;
+    for (size_t i = 0; i < SECTORS_PER_PAGE; i++)
+        block_write(swap_block,
+                    base_sector + i,
+                    buf + i * BLOCK_SECTOR_SIZE);
 
-    for (int i = 0; i < get_sectors_per_page(); i++)
-        block_write(swap_table->swap_block,
-                    base_sector + (size_t)i,
-                    buf + (size_t)i * BLOCK_SECTOR_SIZE);
+    lock_release(&swap_lock);
 
-    // clear frame after writing
-    memset(kpage, 0, PGSIZE);
-    lock_release(&swap_table->lock);
     return slot;
 }
 
+/* Swap in: read slot → restore page to memory */
 void swap_in(void *kpage, size_t slot) {
-    ASSERT(swap_table != NULL);
-    ASSERT(slot < swap_table->total_slots);
     ASSERT(pg_ofs(kpage) == 0);
+    ASSERT(swap_bitmap != NULL);
+    ASSERT(swap_block != NULL);
+    ASSERT(slot < bitmap_size(swap_bitmap));
 
-    // printf("[swap_in] - Swapping in kpage=%p from slot=%zu\n", kpage, slot);
-    lock_acquire(&swap_table->lock);
+    lock_acquire(&swap_lock);
 
-    size_t base_sector = slot * (size_t)get_sectors_per_page();
-    uint8_t* buf = (uint8_t*) kpage;
+    ASSERT(bitmap_test(swap_bitmap, slot));
 
-    // Read back into newly allocated frame
-    for (int i = 0; i < get_sectors_per_page(); i++)
-        block_read(swap_table->swap_block,
-                   base_sector + (size_t)i,
-                   buf + (size_t)i * BLOCK_SECTOR_SIZE);
+    size_t base_sector = slot * SECTORS_PER_PAGE;
+    uint8_t *buf = (uint8_t *) kpage;
 
-    // Mark slot free again
-    bitmap_set(swap_table->used_slots, slot, false);
-    lock_release(&swap_table->lock);
+    for (size_t i = 0; i < SECTORS_PER_PAGE; i++)
+        block_read(swap_block,
+                   base_sector + i,
+                   buf + i * BLOCK_SECTOR_SIZE);
+
+    bitmap_set(swap_bitmap, slot, false);
+
+    lock_release(&swap_lock);
 }
 
+/* Free swap slot without reading */
 void swap_free(size_t slot) {
-    bitmap_reset(swap_table->used_slots, slot);
+    ASSERT(slot < bitmap_size(swap_bitmap));
+    bitmap_set(swap_bitmap, slot, false);
 }

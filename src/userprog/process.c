@@ -433,7 +433,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   // SPT
   spt_init();
-  //swap_init();
+  // swap_init();
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -445,6 +445,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   // deny execution of the executable file
   file_deny_write(file);
+  
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -636,7 +637,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  //file_seek (file, ofs);
+  file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -651,9 +652,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         return false;
       }
 
-      bool success = setup_spte(
-        spte, upage, false, writable, file, ofs, 
-        page_read_bytes, page_zero_bytes, -1, NULL);
+      if (!setup_spte(spte, upage, false, writable, file, ofs, 
+              page_read_bytes, page_zero_bytes, -1, NULL)) {
+          free(spte);
+          return false;
+      }
+        
       if(!spt_insert(&thread_current()->spt, spte)){
         free(spte);
         return false;
