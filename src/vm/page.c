@@ -97,9 +97,9 @@ bool load_page(struct spt_entry *spte) {
     void *kpage = frame->kpage;
     frame_pin(frame);
 
-    if (spte->swap_slot != (size_t)-1) {
+    if (spte->swap_slot != -1) {
         swap_in(kpage, spte->swap_slot);
-        spte->swap_slot = (size_t)-1;
+        spte->swap_slot = -1;
     }
     else if (spte->file != NULL) {
         //printf("[load_page] loading from file ofs=%d\n", spte->ofs);
@@ -108,7 +108,6 @@ bool load_page(struct spt_entry *spte) {
         int bytes_read = file_read(spte->file, kpage, spte->read_bytes);
         lock_release(&filesys_lock);
         if (bytes_read != (int)spte->read_bytes) {
-           // printf("[load_page] file_read incomplete\n");
             frame_unpin(frame);
             frame_free(frame);
             return false;
@@ -139,7 +138,6 @@ bool load_page(struct spt_entry *spte) {
 bool page_fault_handle(void *fault_addr, bool write, bool not_present, struct intr_frame *f){
     //printf("[pf_handler] fault_addr=%p write=%d\n", fault_addr, write);
     //printf("[pf_handler] fault_addr=%p write=%d esp=%p\n", fault_addr, write, f->esp);
-
     if(!not_present && write){
         return false;
     }

@@ -374,18 +374,21 @@ mapid_t mmap(int fd, void *addr) {
     file = thread_current ()->fd_table[fd];
     if (file == NULL)
     {
+      lock_release(&filesys_lock);
       return -1;
     }    
 
     file = file_reopen(file);  // Add after getting file from fd
     if (file == NULL)
     {
+      lock_release(&filesys_lock);
       return -1;
     }    
 
     file_size = file_length(file);
     if (file_size == 0){
       file_close(file);
+      lock_release(&filesys_lock);
       return -1;
     }
         
