@@ -78,7 +78,6 @@ check_user_pointer_range(const void *uaddr, size_t size) {
     }
 }
 
-
 /* Validate that a user string is in user space and mapped.
    If not, terminate the process. */
 static void check_user_string(const char *str) {
@@ -211,7 +210,7 @@ filesize (int fd) {
 
 int
 read (int fd, void *buffer, unsigned size) {
-  check_user_pointer_range(buffer, size);                 // read/write buffers
+  check_user_pointer_range(buffer, size);          // Buffer must be writable!
 
   int bytes_read = 0;
   lock_acquire (&filesys_lock);
@@ -235,7 +234,7 @@ read (int fd, void *buffer, unsigned size) {
 
 int
 write (int fd, const void *buffer, unsigned size) {
-  check_user_pointer_range(buffer, size);                 // read/write buffers
+  check_user_pointer_range(buffer, size);          // Buffer must be readable!
 
   int bytes_written = 0;
   lock_acquire (&filesys_lock);
