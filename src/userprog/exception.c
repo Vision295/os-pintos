@@ -159,15 +159,20 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   if (user && (fault_addr == NULL || !is_user_vaddr(fault_addr))) {
-   exit(-1);
+      exit(-1);
   }
-
-  if(not_present && user){
-   if(page_fault_handle(fault_addr, write, f)){
-      return;
-   }
-   exit(-1);
+  if(user){
+      if(page_fault_handle(fault_addr, write, not_present, f)){
+         return;
+      }
+      exit(-1);
   }
+//   if(not_present && user){
+//    if(page_fault_handle(fault_addr, write, f)){
+//       return;
+//    }
+//    exit(-1);
+//   }
 
 
 
